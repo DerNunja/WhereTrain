@@ -54,8 +54,8 @@ Zug → Gleis_3 → Position = 0.72
 ## Mögliche Erweiterungen / Verbesserungen
 ### Aktuelle Einschränkung
 - Das Schienennetz muss manuell im Bild modelliert werden
-- Änderungen der Kameraposition oder Perspektive können die Genauigkeit
-  beeinflussen
+- Änderungen der Kameraposition oder Perspektive können die Genauigkeit beeinflussen (wie stark muss noch getestet werden)
+- Sollten sich die Marker verschieben, funktioniert das Mapping der Gleise nicht mehr
 ### Erweiterungsidee: Automatische Schienenerkennung
 Statt manueller Modellierung könnten die Schienen direkt aus dem Bild segmentiert werden.
 > [!NOTE]
