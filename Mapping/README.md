@@ -1,5 +1,5 @@
 # Umsetzung Gleis - Mapping
-Hier kann man sehen wie das Mapping umgesetzt werden soll. Die Marker definieren verschiedene Bereiche (hier beispielhaft benannt "Abschnitt 1"). Mithilfe dieser Marker erstellen wir ein Normalisiertes Bild. Hier rauf wird dann die [[Objekterkennung der Züge]] angewendet.
+Hier kann man sehen wie das Mapping umgesetzt werden soll. Die Marker definieren verschiedene Bereiche (hier beispielhaft benannt "Abschnitt 1"). Mithilfe dieser Marker erstellen wir ein Normalisiertes Bild. Hier rauf wird dann die angewendet.
 ![Normalisiertes Bild](Pictures/Normalized.png)
 [^1]
 
