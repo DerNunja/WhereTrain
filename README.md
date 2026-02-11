@@ -1,7 +1,7 @@
 # Zug Projekt
 Ziel dieses Projekts ist es, die Vorarbeit von **Paul Kellner** zur
 kontextbezogenen Standortbestimmung von Modellzügen zu erweitern.
-![[Pasted image 20260210122648.png]]
+![Aktueller Stand und Erweiterung](Picture1.png)
 Die Arbeit von Paul beantwortet die Frage:
 
 > **„Befindet sich ein Zug innerhalb einer definierten Standortzone (rot)?“**
