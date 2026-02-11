@@ -32,6 +32,7 @@ Diese Normalisierung bildet die Grundlage für alle weiteren Schritte.
 - Detektierte Züge:
   - Bounding Boxes (Baseline)
   - optional: Segmentationsmasken (für höhere Genauigkeit)
+
 **Zuordnung:**
 - Für jede Detektion wird geprüft, **mit welchem Gleispolygon die größte
   Überlappung besteht**
