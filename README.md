@@ -40,7 +40,6 @@ Diese Normalisierung bildet die Grundlage für alle weiteren Schritte.
 ```
 Zug → Gleis_3
 ```
-[[Umsetzung Gleis - Mapping]]
 ### Position auf dem Gleis
 Zusätzlich zur Gleis-ID bestimmen wir die **Position entlang des Gleises**:
 
