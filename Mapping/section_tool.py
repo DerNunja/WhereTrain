@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass, asdict
 from typing import Dict, Tuple, Optional, List
-from Mapping.helper_section_tool import make_detector, detect_markers, autodetect_dictionary, compute_section_src_pts, compute_section_src_pts_center, draw_hud, warp, nearest_marker_id, build_output_name
+from helper_section_tool import make_detector, detect_markers, autodetect_dictionary, compute_section_src_pts, compute_section_src_pts_center, draw_hud, warp, nearest_marker_id, build_output_name
 
 # CONFIG
 USE_WEBCAM = False

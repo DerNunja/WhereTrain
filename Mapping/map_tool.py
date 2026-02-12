@@ -5,7 +5,7 @@ import numpy as np
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict, Any
-from .helper_map_tool import parse_section_from_filename, default_output_json_path, to_py_points, track_sort_key, polyline_to_band, parse_track_number, next_free_track_id
+from helper_map_tool import parse_section_from_filename, default_output_json_path, to_py_points, track_sort_key, polyline_to_band, parse_track_number, next_free_track_id
 
 
 IMAGE_PATH = "Sections/abschnitt_2__ids=TL9_TR10_BR8_BL5__1280x640__dict=DICT_ARUCO_ORIGINAL.png"
