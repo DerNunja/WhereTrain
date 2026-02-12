@@ -13,7 +13,7 @@ Nach der [[Objekterkennung der Züge]] wird die Gleiskarte auf das normalisierte
 ## Was konkret ist der Mapping Prozess?
 Der Mapping Prozess fängt damit an, dass wir die einzelnen Bereiche (Gleise) mit Markern markieren. Dabei ist es vorteilhaft wenn alle Marker die gleiche Ausrichtung haben.
 
-Dann werden mit dem ´section_tool.py´ die Abschnitte festgelegt z.B "Bahnhof". Diese Bereiche werden über ihre Marker definiert (das Tool ermittelt automatisch welche Marker verwendet werden. Sollten Marker verwendet werden welche das Tool nicht kennt müssen diese dem _DICT_CANDIDATES_ hinzugefügt werden). Dabei sollte man sich auf eine Markierungsstratigie einigen, für jeden Marker kann man festlegen ob der TL - Top Left, TR oder Bl - Bottom Left ist. 
+Dann werden mit dem ´section_tool.py´ die Abschnitte festgelegt z.B "Bahnhof". Abschnitte können einfach durch das anklicken der Marker erstellt werden. Diese Bereiche werden über ihre Marker definiert (das Tool ermittelt automatisch welche Marker verwendet werden. Sollten Marker verwendet werden welche das Tool nicht kennt müssen diese dem _DICT_CANDIDATES_ hinzugefügt werden). Dabei sollte man sich auf eine Markierungsstratigie einigen, für jeden Marker kann man festlegen ob der TL - Top Left, TR oder Bl - Bottom Left ist. 
 ![section_tool](Pictures/section_tool.png)
 Wir verwenden erstmal alle Top als Außen mit entsprechend Links und Rechts und Innen also Bottom. So ensteht entrolltes Schienennetz. Nachdem man ein Bereich festgelegt hat wird dieser normalisiert, wahlweise können in einem Bild meherere Abschnitte definiert werden. Nachdem man mit der Markierung fertig ist werden die normalisierten Werte und die Verzerrungsmatrix gespeichert.
 
