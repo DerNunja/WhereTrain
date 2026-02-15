@@ -4,7 +4,11 @@ import json
 import os
 from dataclasses import dataclass, asdict
 from typing import Dict, Tuple, Optional, List
-from helper_section_tool import make_detector, detect_markers, autodetect_dictionary, compute_section_src_pts, compute_section_src_pts_center, draw_hud, warp, nearest_marker_id, build_output_name
+from helper_section_tool import (
+    make_detector, detect_markers, autodetect_dictionary,
+    compute_section_src_pts, compute_section_src_pts_center,
+    draw_hud, warp, nearest_marker_id, build_output_name
+)
 
 # CONFIG
 USE_WEBCAM = False
@@ -188,7 +192,7 @@ class MultiNormalizeTool:
 
         os.makedirs(SECTIONS_DIR, exist_ok=True)
 
-        warped_img, H = warp(frame, src_pts, canvas)
+        warped_img, _H = warp(frame, src_pts, canvas)
 
         name_png = build_output_name(
             s.section_id,
@@ -197,25 +201,16 @@ class MultiNormalizeTool:
             self.autodict_name,
             ".png"
         )
-        name_npy = build_output_name(
-            s.section_id,
-            s.corner_ids,
-            (s.canvas_w, s.canvas_h),
-            self.autodict_name,
-            ".npy"
-        )
 
         cv2.imwrite(os.path.join(SECTIONS_DIR, name_png), warped_img)
-        np.save(os.path.join(SECTIONS_DIR, name_npy), H)
 
         print(f"[{s.section_id}] Saved to '{SECTIONS_DIR}/'")
-
 
     def export_all(self, frame: np.ndarray, id_to_corners: Dict[int, np.ndarray]):
         for s in self.sections:
             self.export_section(frame, id_to_corners, s)
 
-    # main loop 
+    # main loop
     def run(self):
         # load frame
         if USE_WEBCAM:
@@ -340,7 +335,7 @@ class MultiNormalizeTool:
             if self.await_preset_for_new_section and ch in CANVAS_PRESETS:
                 self._finalize_add_section_with_preset(ch)
                 continue
-            
+
             if key == ord('1'):
                 self.await_corner = "TL"
             if key == ord('2'):

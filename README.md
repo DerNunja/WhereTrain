@@ -50,6 +50,11 @@ Zusätzlich zur Gleis-ID bestimmen wir die **Position entlang des Gleises**:
 ```
 Zug → Gleis_3 → Position = 0.72
 ```
+
+## runtime.py
+runtime.py führt alle Komponenten zusammen. Es lädt die definierten Abschnitte (Marker-IDs + Canvasgröße) sowie die zugehörigen H.npy und trackmap.json Dateien. Pro Frame wird nach ArUco-Markern gesucht. Für jeden Abschnitt wird geprüft, ob alle vier Marker sichtbar sind. Sind sie sichtbar, werden aus den Markerpositionen die Quellpunkte bestimmt und per Homographie ein normalisiertes Abschnittsbild erzeugt.
+Auf dem normalisierten Abschnittsbild wird die Zug-Objekterkennung ausgeführt. Für jede Detektion wird die Überlappung mit den Gleis-“Bändern” berechnet und das Gleis mit der höchsten (und ausreichenden) Überlappung gewählt; bei Bedarf wird über Distanz zur Gleis-Polyline oder zeitliche Glättung aufgelöst. Anschließend wird die Position entlang des zugeordneten Gleises durch Projektion auf die Gleis-Polyline bestimmt (z. B. als normierter Wert 0..1).
+
 ## Mögliche Erweiterungen / Verbesserungen
 ### Aktuelle Einschränkung
 - Das Schienennetz muss manuell im Bild modelliert werden

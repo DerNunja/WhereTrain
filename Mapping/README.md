@@ -1,5 +1,5 @@
 # Umsetzung Gleis - Mapping
-Hier kann man sehen wie das Mapping umgesetzt werden soll. Die Marker definieren verschiedene Bereiche (hier beispielhaft benannt "Abschnitt 1"). Mithilfe dieser Marker erstellen wir ein Normalisiertes Bild. Hier rauf wird dann die angewendet.
+Hier kann man sehen wie das Mapping umgesetzt werden soll. Die Marker definieren verschiedene Bereiche (hier beispielhaft benannt "Abschnitt 1"). Mithilfe dieser Marker erstellen wir ein Normalisiertes Bild. Hierauf wird anschließend die Objekterkennung der Züge angewendet
 ![Normalisiertes Bild](Pictures/Normalized.png)
 [^1]
 
@@ -13,11 +13,19 @@ Nach der [[Objekterkennung der Züge]] wird die Gleiskarte auf das normalisierte
 ## Was konkret ist der Mapping Prozess?
 Der Mapping Prozess fängt damit an, dass wir die einzelnen Bereiche (Gleise) mit Markern markieren. Dabei ist es vorteilhaft wenn alle Marker die gleiche Ausrichtung haben.
 
-Dann werden mit dem ´section_tool.py´ die Abschnitte festgelegt z.B "Bahnhof". Abschnitte können einfach durch das anklicken der Marker erstellt werden. Diese Bereiche werden über ihre Marker definiert (das Tool ermittelt automatisch welche Marker verwendet werden. Sollten Marker verwendet werden welche das Tool nicht kennt müssen diese dem _DICT_CANDIDATES_ hinzugefügt werden). Dabei sollte man sich auf eine Markierungsstratigie einigen, für jeden Marker kann man festlegen ob der TL - Top Left, TR oder Bl - Bottom Left ist. 
+Dann werden mit dem ´section_tool.py´ die Abschnitte festgelegt z.B "Bahnhof". Abschnitte können einfach durch das anklicken der Marker erstellt werden. Diese Bereiche werden über ihre Marker definiert (das Tool ermittelt automatisch welche Marker verwendet werden. Sollten Marker verwendet werden welche das Tool nicht kennt müssen diese dem _DICT_CANDIDATES_ hinzugefügt werden). Dabei sollte man sich auf eine Markierungsstratigie einigen, z. B. TL/TR als „außen“ und BL/BR als „innen“.. 
 ![section_tool](Pictures/section_tool.png)
-Wir verwenden erstmal alle Top als Außen mit entsprechend Links und Rechts und Innen also Bottom. So ensteht entrolltes Schienennetz. Nachdem man ein Bereich festgelegt hat wird dieser normalisiert, wahlweise können in einem Bild meherere Abschnitte definiert werden. Nachdem man mit der Markierung fertig ist werden die normalisierten Werte und die Verzerrungsmatrix gespeichert.
+Wir verwenden zunächst: Top = außen, Bottom = innen (mit links/rechts entsprechend), sodass ein „entrolltes“ Schienennetz entsteht. Nachdem ein Bereich festgelegt wurde, wird er normalisiert (perspektivisch entzerrt) und als PNG gespeichert. Optional können in einem Bild mehrere Abschnitte definiert werden.
+Alle relevanten Informationen (Section-ID, Marker-IDs, Canvas-Größe und Dictionary) werden direkt im Dateinamen des normalisierten Bildes abgelegt.
+´´´ini
+abschnitt_1__ids=TL1_TR7_BR5_BL2__1280x640__dict=DICT_ARUCO_ORIGINAL.png
+´´´
+- abschnitt_1 → Section-ID
+- ids=TL1_TR7_BR5_BL2 → verwendete Marker-IDs pro Ecke
+- 1280x640 → Canvas-Größe des normalisierten Bereichs
+- dict=... → verwendetes ArUco-Dictionary
 
-Der nächste Schritt ist das Mappen der Gleise. Dafür wird das ´map_tool.py´ verwendet. Hier zeichnet man die Gleise auf den normalisierten Abschnitten ein. Ein Gleis besteht dabei aus einer Polygon-Linie (möglichst mittig platzieren) und einem "Band" welches ungefähr so Breit wie die Schienen sein sollte. Polygon-Line und Band werden später verwendet um zu erkennen auf welchem Gleis ein Zug ist und wo konkret auf dem Gleis. Das Tool gibt am Ende eine .json Datei aus welche die Gleise-IDs und die Koordinaten der Polygon-Linien derer enthält.
+Der nächste Schritt ist das Mappen der Gleise. Dafür wird das ´map_tool.py´ verwendet. Hier zeichnet man die Gleise auf den normalisierten Abschnitten ein. Ein Gleis besteht dabei aus einer Polygon-Linie (möglichst mittig platzieren) und einem "Band" welches ungefähr so Breit wie die Schienen sein sollte. Die Polyline repräsentiert die geometrische Gleisachse. Das Band ist ein daraus generiertes Polygon, das die effektive Gleisbreite approximiert. Das Band wird für die Überlappungsberechnung verwendet, die Polyline für die Positionsprojektion entlang des Gleises. Das Tool gibt am Ende eine .json Datei aus mit den Gleisen und deren Beschreibung(track_id, polyline, band).
 ![map_tool](Pictures/map_tool.png)
 
 Eine Dokumentation zur Nutzung der Tools folgt...
