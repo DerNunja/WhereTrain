@@ -192,7 +192,7 @@ class MultiNormalizeTool:
 
         os.makedirs(SECTIONS_DIR, exist_ok=True)
 
-        warped_img, _H = warp(frame, src_pts, canvas)
+        warped_img= warp(frame, src_pts, canvas)
 
         name_png = build_output_name(
             s.section_id,
@@ -284,7 +284,7 @@ class MultiNormalizeTool:
 
             cur = self._cur()
             found_ids = [] if ids is None else ids.flatten().tolist()
-            status = "PRESET SELECT: press 1..6" if self.await_preset_for_new_section else "normal"
+            status = "PRESET SELECT: press 1..6" if self.await_preset_for_new_section else "normal" 
             hud = [
                 f"Dict: {self.autodict_name} | Found: {len(found_ids)} | IDs: {found_ids}",
                 f"Mode: {status}",
