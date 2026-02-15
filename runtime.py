@@ -11,7 +11,7 @@ from Mapping.helper_section_tool import (
     autodetect_dictionary,
     make_detector,
     detect_markers,
-    compute_section_src_pts_center,  # centers for less overlap sensitivity
+    compute_section_src_pts_center,  
     warp,
 )
 
@@ -19,10 +19,10 @@ Point = Tuple[int, int]
 
 
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
-TRACKMAP_DIR = "Mapping/Sections"       # contains *__trackmap.json
+TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
 SHOW_DEBUG = True
 
-# if you want to ignore weak overlaps:
+# if you want to ignore weak overlap
 MIN_OVERLAP_PX = 50
 
 WIN_W, WIN_H = 1280, 720
