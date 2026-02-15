@@ -178,7 +178,7 @@ class MultiNormalizeTool:
             return None
         corner_ids_int = {k: int(v) for k, v in s.corner_ids.items()}
 
-        if use_marker_center == True:
+        if use_marker_center:
             return compute_section_src_pts_center(id_to_corners, corner_ids_int)
         else:
             return compute_section_src_pts(id_to_corners, corner_ids_int)
