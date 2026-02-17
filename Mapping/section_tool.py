@@ -192,7 +192,7 @@ class MultiNormalizeTool:
 
         os.makedirs(SECTIONS_DIR, exist_ok=True)
 
-        warped_img= warp(frame, src_pts, canvas)
+        warped_img, _H = warp(frame, src_pts, canvas)
 
         name_png = build_output_name(
             s.section_id,

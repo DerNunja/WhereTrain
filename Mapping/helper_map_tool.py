@@ -8,20 +8,30 @@ Point = Tuple[int, int]
 
 def parse_section_from_filename(path: str) -> Dict[str, Any]:
     base = os.path.basename(path)
-    m = re.match(r"(?P<section>[^_]+(?:_[^_]+)*)__ids=(?P<ids>[^_]+)__(?P<w>\d+)x(?P<h>\d+)", base)
+
+    m = re.search(
+        r"(?P<section>.+?)__ids=(?P<ids>TL\d+_TR\d+_BR\d+_BL\d+)__(?P<w>\d+)x(?P<h>\d+)",
+        base
+    )
     if m:
         section_id = m.group("section")
         ids_str = m.group("ids")
         w, h = int(m.group("w")), int(m.group("h"))
 
-        corner_ids = {}
+        corner_ids: Dict[str, int] = {}
         for part in ids_str.split("_"):
             mm = re.match(r"(TL|TR|BR|BL)(\d+)", part)
             if mm:
                 corner_ids[mm.group(1)] = int(mm.group(2))
 
-        return {"section_id": section_id, "corner_ids": corner_ids or None, "canvas": (w, h), "raw": base}
+        return {
+            "section_id": section_id,
+            "corner_ids": corner_ids if corner_ids else None,
+            "canvas": (w, h),
+            "raw": base,
+        }
 
+    # Fallback: use filename stem
     section_id = os.path.splitext(base)[0]
     return {"section_id": section_id, "corner_ids": None, "canvas": None, "raw": base}
 

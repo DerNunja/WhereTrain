@@ -8,7 +8,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from helper_map_tool import parse_section_from_filename, default_output_json_path, to_py_points, track_sort_key, polyline_to_band, parse_track_number, next_free_track_id
 
 
-IMAGE_PATH = "Sections/hjgz__ids=TL9_TR10_BR8_BL5__1280x640__dict=DICT_ARUCO_ORIGINAL.png"
+IMAGE_PATH = "Sections/ab2__ids=TL9_TR10_BR8_BL5__1280x640__dict=DICT_ARUCO_ORIGINAL.png"
 WINDOW_NAME = "Track Mapping Tool"
 
 DRAW_RADIUS = 4
