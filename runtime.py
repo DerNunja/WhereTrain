@@ -1,5 +1,4 @@
 import os
-import re
 import json
 from dataclasses import dataclass
 from typing import Dict, Tuple, Optional, List, Any
@@ -15,6 +14,8 @@ from Mapping.helper_section_tool import (
     warp,
 )
 
+from Mapping.helper_map_tool import parse_section_from_filename
+
 Point = Tuple[int, int]
 
 
@@ -22,49 +23,21 @@ IMAGE_PATH = "Mapping/Pictures/different.jpg"
 TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
 SHOW_DEBUG = True
 
-# if you want to ignore weak overlap
 MIN_OVERLAP_PX = 50
 
 WIN_W, WIN_H = 1280, 720
+
+
 def setup_window(name: str):
     cv2.namedWindow(name, cv2.WINDOW_NORMAL)     
     cv2.resizeWindow(name, WIN_W, WIN_H)   
 
 
 def parse_section_from_trackmap_filename(path: str) -> Dict[str, Any]:
-    """
-    Expect something like:
-      abschnitt_1__ids=TL1_TR7_BR5_BL2__1280x640__dict=DICT_ARUCO_ORIGINAL__trackmap.json
-    """
-    base = os.path.basename(path)
-
-    m = re.match(
-        r"(?P<section>.+?)__ids=(?P<ids>TL\d+_TR\d+_BR\d+_BL\d+)__(?P<w>\d+)x(?P<h>\d+).*__trackmap\.json$",
-        base
-    )
-    if not m:
-        raise ValueError(f"Trackmap filename does not match pattern: {base}")
-
-    section_id = m.group("section")
-    ids_str = m.group("ids")
-    w, h = int(m.group("w")), int(m.group("h"))
-
-    corner_ids: Dict[str, int] = {}
-    for part in ids_str.split("_"):
-        mm = re.match(r"(TL|TR|BR|BL)(\d+)", part)
-        if mm:
-            corner_ids[mm.group(1)] = int(mm.group(2))
-
-    if any(k not in corner_ids for k in ["TL", "TR", "BR", "BL"]):
-        raise ValueError(f"Missing corner IDs in filename: {base}")
-
-    return {
-        "section_id": section_id,
-        "corner_ids": corner_ids,
-        "canvas": (w, h),
-        "raw": base,
-    }
-
+    info = parse_section_from_filename(path)
+    if not info.get("corner_ids") or not info.get("canvas"):
+        raise ValueError(f"Missing ids/canvas in filename: {os.path.basename(path)}")
+    return info
 
 
 @dataclass
@@ -113,7 +86,6 @@ def load_sections(trackmap_dir: str) -> List[Section]:
         )
 
     return sections
-
 
 
 def _to_cv_poly(pts: List[Point]) -> Optional[np.ndarray]:
@@ -290,3 +262,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
