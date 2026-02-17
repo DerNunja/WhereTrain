@@ -173,14 +173,38 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
         return None, best_area
     return best_tid, best_area
 
+#fake train detection for tests
+def detect_trains_simulated(warped_bgr: np.ndarray, t: int) -> List[Tuple[int, int, int, int]]:
+    """
+    Simulierter Zug: eine Box bewegt sich über das normalisierte Bild.
+    t = frame index (0..)
+    """
+    h, w = warped_bgr.shape[:2]
 
+    bw, bh = int(w * 0.3), int(h * 0.10)
+
+    # Bewegung: links -> rechts, leicht sinus in y
+    x1 = int((t * 8) % (w + bw) - bw)  # startet außerhalb links, läuft durch
+    y_center = int(h * 0.4 + np.sin(t * 0.06) * (h * 0.3))
+    y1 = int(y_center - bh // 2)
+
+    # clamp
+    x1 = max(0, min(w - 1, x1))
+    y1 = max(0, min(h - 1, y1))
+
+    x2 = max(0, min(w, x1 + bw))
+    y2 = max(0, min(h, y1 + bh))
+
+    if x2 <= x1 + 2 or y2 <= y1 + 2:
+        return []
+    return [(x1, y1, x2, y2)]
+
+
+"""
 # detection modell
 def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
-    """
-    Replace with YOLO etc.
-    Return [(x1,y1,x2,y2), ...] in normalized image coordinates.
-    """
     return []
+"""
 
 
 def main():
@@ -216,48 +240,55 @@ def main():
     if SHOW_DEBUG:
         vis_in = frame.copy()
         cv2.aruco.drawDetectedMarkers(vis_in, corners, ids)
-
         setup_window("Input (detected markers)")
         cv2.imshow("Input (detected markers)", vis_in)
 
-    # 3) process each section
-    for s in sections:
-        src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
-        if src_pts is None:
-            print(f"[{s.section_id}] missing marker(s) in current frame → skip")
-            continue
+    # 3) "video" loop (simulation)
+    t = 0
+    while True:
+        key = cv2.waitKey(30) & 0xFF
+        if key in (27, ord("q")):  # ESC or q
+            break
 
-        warped, H = warp(frame, src_pts, s.canvas)
+        for s in sections:
+            src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
+            if src_pts is None:
+                # section not visible -> skip
+                continue
 
-        # 4) run train detection on normalized image
-        bboxes = detect_trains_stub(warped)
+            warped, _H = warp(frame, src_pts, s.canvas)
 
-        # 5) assign boxes to tracks
-        assignments = []
-        shape_hw = (s.canvas[1], s.canvas[0])
+            # 4) simulated train detection on normalized image
+            bboxes = detect_trains_simulated(warped, t)
 
-        for bb in bboxes:
-            tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
-            assignments.append((bb, tid, area))
+            # 5) assign boxes to tracks
+            shape_hw = (s.canvas[1], s.canvas[0])
+            assignments = []
+            for bb in bboxes:
+                tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
+                assignments.append((bb, tid, area))
 
-        # 6) visualize
-        out = draw_tracks_overlay(warped, s.tracks)
-        out = draw_bboxes(out, bboxes, "train")
+            # 6) visualize
+            out = draw_tracks_overlay(warped, s.tracks)
 
-        # print results
-        if assignments:
             for (bb, tid, area) in assignments:
-                print(f"[{s.section_id}] bbox={bb} -> track={tid} overlap_px={area}")
-        else:
-            print(f"[{s.section_id}] no trains detected (stub)")
+                x1, y1, x2, y2 = bb
+                cv2.rectangle(out, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                txt = f"{tid if tid else 'None'} | ov={area}"
+                cv2.putText(
+                    out, txt, (x1, max(0, y1 - 6)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2
+                )
 
-        if SHOW_DEBUG:
-            win_name = f"Warped+Tracks [{s.section_id}]"
-            setup_window(win_name)
-            cv2.imshow(win_name, out)
+            if SHOW_DEBUG:
+                win_name = f"Warped+Tracks [{s.section_id}]"
+                setup_window(win_name)
+                cv2.imshow(win_name, out)
 
-    cv2.waitKey(0)
+        t += 1
+
     cv2.destroyAllWindows()
+
 
 
 if __name__ == "__main__":
