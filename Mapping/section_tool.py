@@ -13,8 +13,8 @@ from helper_section_tool import (
 # CONFIG
 USE_WEBCAM = False
 WEBCAM_INDEX = 0
-IMAGE_PATH = "Pictures/Base.jpg"
-scale = 0.5
+IMAGE_PATH = "Pictures/sections_find.png"
+scale = 1.0     #bei schlechter performance kann man die Skalierung reduzieren
 use_marker_center = True
 
 SECTIONS_DIR = "Sections"
