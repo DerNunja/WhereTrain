@@ -188,8 +188,8 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
 def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
     return detect_by_color(
         warped_bgr,
-        min_area=800,
-        morph_kernel=7,
+        min_area=400,
+        morph_kernel=5,
         morph_iters=2,
     )
 
