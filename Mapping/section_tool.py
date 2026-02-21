@@ -13,7 +13,7 @@ from helper_section_tool import (
 # CONFIG
 USE_WEBCAM = False
 WEBCAM_INDEX = 0
-IMAGE_PATH = "Pictures/sections_find.png"
+IMAGE_PATH = "Pictures/frame.png"
 scale = 1.0     #bei schlechter performance kann man die Skalierung reduzieren
 use_marker_center = True
 
@@ -38,7 +38,7 @@ CANVAS_PRESETS: Dict[str, Tuple[Tuple[int, int], str]] = {
     "3": ((1280, 720),  "16:9 (1280x720)"),
     "4": ((1920, 1080), "16:9 (1920x1080)"),
     "5": ((640, 640),   "1:1 small (640x640)"),
-    "6": ((1600, 800),  "2:1 (1600x800)"),
+    "6": ((640, 320),  "2:1 small(1600x800)"),
 }
 DEFAULT_PRESET_KEY = "1"
 
