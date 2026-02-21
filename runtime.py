@@ -16,7 +16,7 @@ from Mapping.helper_section_tool import (
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
-from Detection.detection_with_color import detect_largest_green_yellow_bbox
+from Detection.detection_with_color import detect_by_color
 
 Point = Tuple[int, int]
 
@@ -186,7 +186,7 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
 
 # detection modell
 def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
-    return detect_largest_green_yellow_bbox(
+    return detect_by_color(
         warped_bgr,
         min_area=800,
         morph_kernel=7,
