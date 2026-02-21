@@ -16,12 +16,22 @@ from Mapping.helper_section_tool import (
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
+from Detection.detection_with_color import detect_largest_green_yellow_bbox
+
 Point = Tuple[int, int]
 
-
-IMAGE_PATH = "Mapping/Pictures/different.jpg"
-TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
+USE_IMAGE = False
+USE_VIDEO = True
+USE_WEBCAM = False
 SHOW_DEBUG = True
+
+WEBCAM_INDEX = 0    #live
+IMAGE_PATH = "Mapping/Pictures/different.jpg"
+VIDEO_PATH = "data/TestVid3.mp4"
+TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
+
+# optional: Video-Performance
+PROCESS_EVERY_NTH_FRAME = 1   # 1 = jeden Frame, 2 = jeden 2ten, ...
 
 MIN_OVERLAP_PX = 50
 
@@ -176,11 +186,13 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
 
 # detection modell
 def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
-    """
-    Replace with YOLO etc.
-    Return [(x1,y1,x2,y2), ...] in normalized image coordinates.
-    """
-    return []
+    return detect_largest_green_yellow_bbox(
+        warped_bgr,
+        min_area=800,
+        morph_kernel=7,
+        morph_iters=2,
+    )
+
 
 
 def main():
@@ -192,74 +204,143 @@ def main():
     for s in sections:
         print(f" - {s.section_id} canvas={s.canvas} ids={s.corner_ids} tracks={len(s.tracks)}")
 
-    frame = cv2.imread(IMAGE_PATH)
-    if frame is None:
-        raise RuntimeError(f"Cannot read image: {IMAGE_PATH}")
+    # -------------------------
+    # Input source (image/video/webcam)
+    # -------------------------
+    cap = None
+    single_image = None
 
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    if USE_IMAGE:
+        single_image = cv2.imread(IMAGE_PATH)
+        if single_image is None:
+            raise RuntimeError(f"Cannot read image: {IMAGE_PATH}")
+    else:
+        if USE_WEBCAM:
+            cap = cv2.VideoCapture(WEBCAM_INDEX)
+        else:
+            cap = cv2.VideoCapture(VIDEO_PATH)
 
-    # 1) autodetect dictionary (from helpers)
-    count, dict_name, dict_id = autodetect_dictionary(gray)
-    print(f"Autodict: {dict_name} (found markers: {count})")
-    detector = make_detector(dict_id)
+        if not cap.isOpened():
+            src = f"webcam index {WEBCAM_INDEX}" if USE_WEBCAM else VIDEO_PATH
+            raise RuntimeError(f"Cannot open video source: {src}")
 
-    corners, ids = detect_markers(gray, detector)
-    if ids is None or len(ids) == 0:
-        raise RuntimeError("No markers detected in frame.")
-
-    # 2) build id -> corners(4,2)
-    id_to_corners: Dict[int, np.ndarray] = {}
-    for i, mid in enumerate(ids.flatten().tolist()):
-        id_to_corners[int(mid)] = corners[i].reshape(4, 2)
-
-    # debug input
+    # Optional windows
     if SHOW_DEBUG:
-        vis_in = frame.copy()
-        cv2.aruco.drawDetectedMarkers(vis_in, corners, ids)
-
         setup_window("Input (detected markers)")
-        cv2.imshow("Input (detected markers)", vis_in)
 
-    # 3) process each section
-    for s in sections:
-        src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
-        if src_pts is None:
-            print(f"[{s.section_id}] missing marker(s) in current frame → skip")
+    frame_idx = 0
+    paused = False
+
+    while True:
+        if USE_IMAGE:
+            frame = single_image.copy()
+            ok = True
+        else:
+            if paused:
+                key = cv2.waitKey(30) & 0xFF
+                if key == ord(' '):  # unpause
+                    paused = False
+                elif key == 27:      # ESC
+                    break
+                elif key == ord('s'):
+                    cv2.imwrite(f"frame_paused_{frame_idx:06d}.png", frame)
+                    print(f"Saved frame_paused_{frame_idx:06d}.png")
+                continue
+
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break  # end of video
+
+        frame_idx += 1
+        if PROCESS_EVERY_NTH_FRAME > 1 and (frame_idx % PROCESS_EVERY_NTH_FRAME) != 0:
             continue
 
-        warped, H = warp(frame, src_pts, s.canvas)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # 4) run train detection on normalized image
-        bboxes = detect_trains_stub(warped)
+        # 1) autodetect dictionary (from helpers)
+        count, dict_name, dict_id = autodetect_dictionary(gray)
+        detector = make_detector(dict_id)
 
-        # 5) assign boxes to tracks
-        assignments = []
-        shape_hw = (s.canvas[1], s.canvas[0])
+        corners, ids = detect_markers(gray, detector)
 
-        for bb in bboxes:
-            tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
-            assignments.append((bb, tid, area))
-
-        # 6) visualize
-        out = draw_tracks_overlay(warped, s.tracks)
-        out = draw_bboxes(out, bboxes, "train")
-
-        # print results
-        if assignments:
-            for (bb, tid, area) in assignments:
-                print(f"[{s.section_id}] bbox={bb} -> track={tid} overlap_px={area}")
-        else:
-            print(f"[{s.section_id}] no trains detected (stub)")
-
+        # Debug input
         if SHOW_DEBUG:
-            win_name = f"Warped+Tracks [{s.section_id}]"
-            setup_window(win_name)
-            cv2.imshow(win_name, out)
+            vis_in = frame.copy()
+            if ids is not None and len(ids) > 0:
+                cv2.aruco.drawDetectedMarkers(vis_in, corners, ids)
+            cv2.imshow("Input (detected markers)", vis_in)
 
-    cv2.waitKey(0)
+        if ids is None or len(ids) == 0:
+            # No markers in this frame -> skip processing sections, but keep loop running
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27:
+                break
+            elif key == ord(' '):
+                paused = True
+            elif key == ord('s'):
+                cv2.imwrite(f"frame_{frame_idx:06d}_nomarkers.png", frame)
+                print(f"Saved frame_{frame_idx:06d}_nomarkers.png")
+            if USE_IMAGE:
+                break
+            continue
+
+        # 2) build id -> corners(4,2)
+        id_to_corners: Dict[int, np.ndarray] = {}
+        for i, mid in enumerate(ids.flatten().tolist()):
+            id_to_corners[int(mid)] = corners[i].reshape(4, 2)
+
+        # 3) process each section
+        for s in sections:
+            src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
+            if src_pts is None:
+                # missing marker(s) in this frame -> skip this section
+                continue
+
+            warped, H = warp(frame, src_pts, s.canvas)
+
+            # 4) run train detection on normalized image
+            bboxes = detect_trains_stub(warped)
+
+            # 5) assign boxes to tracks
+            shape_hw = (s.canvas[1], s.canvas[0])
+            assignments = []
+            for bb in bboxes:
+                tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
+                assignments.append((bb, tid, area))
+
+            # 6) visualize
+            out = draw_tracks_overlay(warped, s.tracks)
+            out = draw_bboxes(out, bboxes, "train")
+
+            if SHOW_DEBUG:
+                win_name = f"Warped+Tracks [{s.section_id}]"
+                setup_window(win_name)
+                cv2.imshow(win_name, out)
+
+            # optional prints (spammt bei Video -> ggf. nur bei detections)
+            for (bb, tid, area) in assignments:
+                if tid is not None:
+                    print(f"[frame {frame_idx:06d}][{s.section_id}] bbox={bb} -> track={tid} overlap_px={area}")
+
+        # Key handling
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:          # ESC
+            break
+        elif key == ord(' '):  # Pause
+            paused = True
+        elif key == ord('s'):  # Save current input frame
+            cv2.imwrite(f"frame_{frame_idx:06d}.png", frame)
+            print(f"Saved frame_{frame_idx:06d}.png")
+
+        if USE_IMAGE:
+            # For images we process exactly once
+            cv2.waitKey(0)
+            break
+
+    if cap is not None:
+        cap.release()
     cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
     main()
-

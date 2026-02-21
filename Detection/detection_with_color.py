@@ -4,7 +4,7 @@ from typing import List, Tuple
 
 BBox = Tuple[int, int, int, int]  # (x1, y1, x2, y2)
 
-def detect_largest_green_yellow_bbox(
+def detect_by_color(
     bgr: np.ndarray,
     min_area: int = 500,           # filtert Kleinkram raus
     morph_kernel: int = 5,         # Morph-Kernelgröße
