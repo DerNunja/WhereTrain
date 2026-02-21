@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from dataclasses import dataclass
 from typing import Dict, Tuple, Optional, List, Any
 
@@ -16,7 +17,6 @@ from Mapping.helper_section_tool import (
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
-from Detection.detection_with_color import detect_largest_green_yellow_bbox
 
 Point = Tuple[int, int]
 
@@ -32,6 +32,7 @@ TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
 
 # optional: Video-Performance
 PROCESS_EVERY_NTH_FRAME = 1   # 1 = jeden Frame, 2 = jeden 2ten, ...
+H_TIMEOUT_SEC = 6.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
 
 MIN_OVERLAP_PX = 50
 
@@ -186,13 +187,13 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
 
 # detection modell
 def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
-    return detect_largest_green_yellow_bbox(
-        warped_bgr,
-        min_area=800,
-        morph_kernel=7,
-        morph_iters=2,
-    )
+    # hier modell einpflegen
+    return []
 
+def warp_with_H(frame_bgr: np.ndarray, H: np.ndarray, canvas: Tuple[int, int]) -> np.ndarray:
+    """Warp via cv2.warpPerspective direkt mit gegebener Homography."""
+    w, h = canvas  # canvas = (W,H)
+    return cv2.warpPerspective(frame_bgr, H, (w, h))
 
 
 def main():
@@ -229,6 +230,8 @@ def main():
         setup_window("Input (detected markers)")
 
     frame_idx = 0
+    last_H: Dict[str, np.ndarray] = {}
+    last_H_time: Dict[str, float] = {}
     paused = False
 
     while True:
@@ -270,33 +273,43 @@ def main():
                 cv2.aruco.drawDetectedMarkers(vis_in, corners, ids)
             cv2.imshow("Input (detected markers)", vis_in)
 
-        if ids is None or len(ids) == 0:
-            # No markers in this frame -> skip processing sections, but keep loop running
-            key = cv2.waitKey(1) & 0xFF
-            if key == 27:
-                break
-            elif key == ord(' '):
-                paused = True
-            elif key == ord('s'):
-                cv2.imwrite(f"frame_{frame_idx:06d}_nomarkers.png", frame)
-                print(f"Saved frame_{frame_idx:06d}_nomarkers.png")
-            if USE_IMAGE:
-                break
-            continue
+        have_markers = (ids is not None and len(ids) > 0)
 
         # 2) build id -> corners(4,2)
         id_to_corners: Dict[int, np.ndarray] = {}
-        for i, mid in enumerate(ids.flatten().tolist()):
-            id_to_corners[int(mid)] = corners[i].reshape(4, 2)
+        if have_markers:
+            for i, mid in enumerate(ids.flatten().tolist()):
+                id_to_corners[int(mid)] = corners[i].reshape(4, 2)
 
         # 3) process each section
-        for s in sections:
-            src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
-            if src_pts is None:
-                # missing marker(s) in this frame -> skip this section
-                continue
+        now = time.time()
 
-            warped, H = warp(frame, src_pts, s.canvas)
+        for s in sections:
+            H_use = None
+            warped = None
+
+            # Versuch: neue Homographie aus aktuellen Markern
+            if have_markers:
+                src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
+                if src_pts is not None:
+                    warped, H_new = warp(frame, src_pts, s.canvas)
+
+                    # Cache aktualisieren
+                    last_H[s.section_id] = H_new
+                    last_H_time[s.section_id] = now
+                    H_use = H_new
+
+            # Fallback: letzte Homographie nutzen, wenn frisch genug
+            if warped is None:
+                H_cached = last_H.get(s.section_id)
+                t_cached = last_H_time.get(s.section_id, -1.0)
+
+                if H_cached is not None and (now - t_cached) <= H_TIMEOUT_SEC:
+                    warped = warp_with_H(frame, H_cached, s.canvas)
+                    H_use = H_cached
+                else:
+                    # kein gültiger Warp möglich
+                    continue
 
             # 4) run train detection on normalized image
             bboxes = detect_trains_stub(warped)
@@ -315,12 +328,17 @@ def main():
             if SHOW_DEBUG:
                 win_name = f"Warped+Tracks [{s.section_id}]"
                 setup_window(win_name)
+
+                # kleine Statusanzeige: ob H neu oder cached
+                status = "H:NEW" if (have_markers and s.section_id in last_H_time and abs(last_H_time[s.section_id] - now) < 1e-3) else "H:CACHED"
+                cv2.putText(out, status, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+
                 cv2.imshow(win_name, out)
 
-            # optional prints (spammt bei Video -> ggf. nur bei detections)
             for (bb, tid, area) in assignments:
                 if tid is not None:
                     print(f"[frame {frame_idx:06d}][{s.section_id}] bbox={bb} -> track={tid} overlap_px={area}")
+
 
         # Key handling
         key = cv2.waitKey(1) & 0xFF
