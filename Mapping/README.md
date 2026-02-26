@@ -28,7 +28,47 @@ abschnitt_1__ids=TL1_TR7_BR5_BL2__1280x640__dict=DICT_ARUCO_ORIGINAL.png
 Der nächste Schritt ist das Mappen der Gleise. Dafür wird das ´map_tool.py´ verwendet. Hier zeichnet man die Gleise auf den normalisierten Abschnitten ein. Ein Gleis besteht dabei aus einer Polygon-Linie (möglichst mittig platzieren) und einem "Band" welches ungefähr so Breit wie die Schienen sein sollte. Die Polyline repräsentiert die geometrische Gleisachse. Das Band ist ein daraus generiertes Polygon, das die effektive Gleisbreite approximiert. Das Band wird für die Überlappungsberechnung verwendet, die Polyline für die Positionsprojektion entlang des Gleises. Das Tool gibt am Ende eine .json Datei aus mit den Gleisen und deren Beschreibung(track_id, polyline, band).
 ![map_tool](Pictures/map_tool.png)
 
-Eine Dokumentation zur Nutzung der Tools folgt...
+## Kurzanleitung der Mapping-Tools
+
+### 1) `section_tool.py` (Abschnitte normalisieren)
+
+Zweck: Marker-basiert einen oder mehrere Abschnitte auswählen und perspektivisch entzerren.
+
+**Ablauf**
+1. Eingabebild in `IMAGE_PATH` setzen (oder Webcam aktivieren).
+2. Tool starten und Dictionary automatisch erkennen lassen.
+3. Abschnitt anlegen (`A`) und Canvas-Preset wählen (`1..6`).
+4. Marker-Ecken für den aktiven Abschnitt setzen (`1=TL`, `2=TR`, `3=BR`, `4=BL`, danach Klick auf Marker).
+5. Abschnitt exportieren (`X`) oder alle Abschnitte exportieren (`E`).
+
+**Wichtige Ausgaben**
+- Normalisierte Abschnittsbilder im Ordner `Mapping/Sections/`.
+- Dateiname enthält `section_id`, Marker-IDs und Canvas-Größe, z. B.:
+
+```text
+abschnitt_1__ids=TL1_TR7_BR5_BL2__1280x640__dict=DICT_ARUCO_ORIGINAL.png
+```
+
+### 2) `map_tool.py` (Gleise mappen)
+
+Zweck: Auf einem normalisierten Abschnittsbild Gleise und optionale Zonen einzeichnen.
+
+**Ablauf**
+1. `IMAGE_PATH` auf ein exportiertes Abschnittsbild setzen.
+2. In `track`-Mode Punkte für eine Gleis-Mittellinie klicken.
+3. Mit `ENTER` speichern (Band wird aus Linienbreite automatisch erzeugt).
+4. Optional weitere Gleise oder Zonen (`Z`) einzeichnen.
+5. Mapping mit `S` als `__trackmap.json` speichern.
+
+**Wichtige Shortcuts**
+- `T`/`Z`: Track-/Zone-Modus
+- `N`: aktuelle Eingabe löschen
+- `BACKSPACE`: letzten Punkt entfernen
+- `+`/`-`: Bandbreite ändern
+- `.` / `,`: nächstes/vorheriges Gleis
+- `S`: JSON speichern
+- `Q`/`ESC`: beenden
+
 
 ### Offene Frage
 **Wie wird das Bild am besten normalisiert?**
