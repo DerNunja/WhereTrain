@@ -17,7 +17,7 @@ Dann werden mit dem ´section_tool.py´ die Abschnitte festgelegt z.B "Bahnhof".
 ![section_tool](Pictures/section_tool.png)
 Wir verwenden zunächst: Top = außen, Bottom = innen (mit links/rechts entsprechend), sodass ein „entrolltes“ Schienennetz entsteht. Nachdem ein Bereich festgelegt wurde, wird er normalisiert (perspektivisch entzerrt) und als PNG gespeichert. Optional können in einem Bild mehrere Abschnitte definiert werden.
 Alle relevanten Informationen (Section-ID, Marker-IDs, Canvas-Größe und Dictionary) werden direkt im Dateinamen des normalisierten Bildes abgelegt.
-´´´ini
+´´´bash
 abschnitt_1__ids=TL1_TR7_BR5_BL2__1280x640__dict=DICT_ARUCO_ORIGINAL.png
 ´´´
 - abschnitt_1 → Section-ID
