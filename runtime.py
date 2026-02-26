@@ -33,10 +33,9 @@ TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
 
 # optional: Video-Performance
 PROCESS_EVERY_NTH_FRAME = 1   # 1 = jeden Frame, 2 = jeden 2ten, ...
-H_TIMEOUT_SEC = 6.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
+H_TIMEOUT_SEC = 8.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
 
 MIN_OVERLAP_PX = 50
-
 WIN_W, WIN_H = 1280, 720
 
 
@@ -188,17 +187,12 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
 
 # detection modell
 def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
-    return detect_by_color(
-        warped_bgr,
-        min_area=400,
-        morph_kernel=5,
-        morph_iters=2,
-    )
+    return detect_by_color(warped_bgr, min_area=400, morph_kernel=5, morph_iters=2)
 
 
 def warp_with_H(frame_bgr: np.ndarray, H: np.ndarray, canvas: Tuple[int, int]) -> np.ndarray:
     """Warp via cv2.warpPerspective direkt mit gegebener Homography."""
-    w, h = canvas  # canvas = (W,H)
+    w, h = canvas 
     return cv2.warpPerspective(frame_bgr, H, (w, h))
 
 
@@ -211,9 +205,6 @@ def main():
     for s in sections:
         print(f" - {s.section_id} canvas={s.canvas} ids={s.corner_ids} tracks={len(s.tracks)}")
 
-    # -------------------------
-    # Input source (image/video/webcam)
-    # -------------------------
     cap = None
     single_image = None
 
@@ -231,7 +222,6 @@ def main():
             src = f"webcam index {WEBCAM_INDEX}" if USE_WEBCAM else VIDEO_PATH
             raise RuntimeError(f"Cannot open video source: {src}")
 
-    # Optional windows
     if SHOW_DEBUG:
         setup_window("Input (detected markers)")
 
