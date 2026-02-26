@@ -1,5 +1,10 @@
-## Zug Erkennung mit Farben
-detection_with_color.py: Implementiert eine Funktion welche grüne und gelbe Pixel in einem Bild erkennt und die größte zusammenhängenden Pixelregion als binäre Maske erzeugt. Diese Maske wird dann verwendet um eine Bounding Box zu berechnen, welche den Bereich der erkannten Farben einschließt.
+# Zug Erkennung mit Farben
+
+detection_with_color.py: Implementiert eine Funktion welche grüne und gelbe Pixel in einem Bild erkennt und die größte zusammenhängenden Pixelregion als binäre Maske erzeugt und diese mit Morphologie bereinigt. Diese Maske wird dann verwendet um eine Bounding Box zu berechnen, welche den Bereich der erkannten Farben einschließt.
+
+- `min_area`: Mindestfläche für erkannte Komponenten.
+- `morph_kernel`: Kernelgröße für Morphologie.
+- `morph_iters`: Anzahl Iterationen für Morphologie.
 
 Die Funktion ist sehr basic und könnte um einiges verbessert werden. Züge sollten eher länglich sein daher wäre es z.B praktisch wenn nur längliche BBoxen weitergeben werden. Am besten wäre es wahrscheinlich wenn man nach farbigen Pixeln nur innerhalb der Gleise sucht.
 
