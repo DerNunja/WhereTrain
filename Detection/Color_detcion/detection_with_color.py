@@ -6,9 +6,9 @@ BBox = Tuple[int, int, int, int]  # (x1, y1, x2, y2)
 
 def detect_by_color(
     bgr: np.ndarray,
-    min_area: int = 500,           # filtert Kleinkram raus
-    morph_kernel: int = 5,         # Morph-Kernelgröße
-    morph_iters: int = 2,          # wie aggressiv säubern
+    min_area: int = 550,           # filtert Kleinkram raus
+    morph_kernel: int = 7,         # Morph-Kernelgröße
+    morph_iters: int = 1,          # wie aggressiv säubern
 ) -> List[BBox]:
     """
     Findet grüne+gelbe Pixel (HSV), nimmt die größte zusammenhängende Region
@@ -23,10 +23,10 @@ def detect_by_color(
 
     # --- HSV ranges (OpenCV Hue: 0..179) ---
     # Gelb: grob 20..35, Grün: grob 35..85 (kann je nach Beleuchtung variieren)
-    yellow_lo = np.array([20, 80, 80], dtype=np.uint8)
-    yellow_hi = np.array([35, 255, 255], dtype=np.uint8)
+    yellow_lo = np.array([16, 130, 60], dtype=np.uint8)
+    yellow_hi = np.array([34, 255, 255], dtype=np.uint8)
 
-    green_lo  = np.array([35, 60, 60], dtype=np.uint8)
+    green_lo  = np.array([50, 130, 40], dtype=np.uint8)
     green_hi  = np.array([85, 255, 255], dtype=np.uint8)
 
     mask_y = cv2.inRange(hsv, yellow_lo, yellow_hi)

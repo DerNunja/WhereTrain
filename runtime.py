@@ -16,7 +16,7 @@ from Mapping.helper_section_tool import (
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
-from Detection.detection_with_color import detect_by_color
+from Detection.Color_detcion.detection_with_color import detect_by_color
 
 Point = Tuple[int, int]
 
