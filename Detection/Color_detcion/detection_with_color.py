@@ -21,7 +21,7 @@ def detect_by_color(
 
     hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
 
-    # --- HSV ranges (OpenCV Hue: 0..179) ---
+    # HSV ranges
     # Gelb: grob 20..35, Grün: grob 35..85 (kann je nach Beleuchtung variieren)
     yellow_lo = np.array([16, 130, 60], dtype=np.uint8)
     yellow_hi = np.array([34, 255, 255], dtype=np.uint8)
@@ -33,15 +33,13 @@ def detect_by_color(
     mask_g = cv2.inRange(hsv, green_lo, green_hi)
     mask = cv2.bitwise_or(mask_y, mask_g)
 
-    # --- Morphology: Rauschen entfernen + Lücken schließen ---
     k = max(3, int(morph_kernel))
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
 
-    # erst "open" (entfernt kleine Punkte), dann "close" (schließt Löcher)
+    # erst open dann close
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=max(1, morph_iters))
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=max(1, morph_iters))
 
-    # --- Connected Components: größte Region finden ---
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
 
     # stats: [label, x, y, w, h, area] (background label 0)
