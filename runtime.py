@@ -184,6 +184,89 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
         return None, best_area
     return best_tid, best_area
 
+#------------------------------------------------Code Firas ------------------------------------------------
+PtF = Tuple[float, float]
+Point = Tuple[int, int]
+
+def polygon_center(poly: List[Point]) -> PtF:
+    xs = [p[0] for p in poly]
+    ys = [p[1] for p in poly]
+    return (float(sum(xs)) / len(xs), float(sum(ys)) / len(ys))
+
+def bbox_center(bbox: Tuple[int, int, int, int]) -> PtF:
+    x1, y1, x2, y2 = bbox
+    return ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
+
+def project_point_to_segment(p: PtF, a: PtF, b: PtF):
+    """
+    Projektion eines Punktes p auf Segment a-b.
+    Returns: t in [0,1], proj point q, squared distance
+    """
+    px, py = p
+    ax, ay = a
+    bx, by = b
+    vx, vy = (bx - ax), (by - ay)
+    wx, wy = (px - ax), (py - ay)
+
+    vv = vx * vx + vy * vy
+    if vv <= 1e-9:
+        q = (ax, ay)
+        dx, dy = (px - ax), (py - ay)
+        return 0.0, q, dx * dx + dy * dy
+
+    t = (wx * vx + wy * vy) / vv
+    t = max(0.0, min(1.0, t))
+    qx = ax + t * vx
+    qy = ay + t * vy
+    dx, dy = (px - qx), (py - qy)
+    return t, (qx, qy), dx * dx + dy * dy
+
+def polyline_lengths(polyline: List[Point]) -> Tuple[List[float], float]:
+    seg_lens = []
+    total = 0.0
+    for i in range(len(polyline) - 1):
+        x1, y1 = polyline[i]
+        x2, y2 = polyline[i + 1]
+        l = float(np.hypot(x2 - x1, y2 - y1))
+        seg_lens.append(l)
+        total += l
+    return seg_lens, total
+
+def position_on_track(center: PtF, track_polyline: List[Point]) -> Tuple[float, float, float]:
+    """
+    Returns (s_px, s_norm, lateral_px)
+    s_px: Distanz entlang Polyline bis zur Projektion
+    s_norm: s_px / total_len (0..1)
+    lateral_px: seitlicher Abstand zur Mittellinie
+    """
+    if len(track_polyline) < 2:
+        return 0.0, 0.0, 0.0
+
+    seg_lens, total_len = polyline_lengths(track_polyline)
+    if total_len <= 1e-9:
+        return 0.0, 0.0, 0.0
+
+    best_dist2 = float("inf")
+    best_s = 0.0
+
+    s_acc = 0.0
+    p = center
+
+    for i in range(len(track_polyline) - 1):
+        a = (float(track_polyline[i][0]), float(track_polyline[i][1]))
+        b = (float(track_polyline[i + 1][0]), float(track_polyline[i + 1][1]))
+
+        t, _, dist2 = project_point_to_segment(p, a, b)
+        if dist2 < best_dist2:
+            best_dist2 = dist2
+            best_s = s_acc + t * seg_lens[i]
+
+        s_acc += seg_lens[i]
+
+    lateral = float(np.sqrt(best_dist2))
+    s_norm = float(best_s / total_len)
+    return best_s, s_norm, lateral
+#------------------------------------------------Code Firas ------------------------------------------------
 
 # detection modell
 def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
@@ -313,9 +396,22 @@ def main():
             # 5) assign boxes to tracks
             shape_hw = (s.canvas[1], s.canvas[0])
             assignments = []
+
+            track_by_id = {tr.track_id: tr for tr in s.tracks}
+
             for bb in bboxes:
                 tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
-                assignments.append((bb, tid, area))
+
+                cx, cy = bbox_center(bb)
+
+                if tid is not None and tid in track_by_id:
+                    s_px, s_norm, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
+                    s_norm_rev = 1.0 - s_norm
+                else:
+                    s_px, s_norm, s_norm_rev, lateral = None, None, None, None
+
+                print(f"[{s.section_id}] bb={bb} -> track={tid} ov={area} s={s_norm} lat={lateral}")
+
 
             # 6) visualize
             out = draw_tracks_overlay(warped, s.tracks)
