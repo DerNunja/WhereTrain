@@ -61,10 +61,3 @@ def detect_by_color(
 
     x, y, w, h = best
     return [(int(x), int(y), int(x + w), int(y + h))]
-
-
-def draw_bbox(bgr: np.ndarray, bboxes: List[BBox], color=(0, 0, 255), thickness=2) -> np.ndarray:
-    out = bgr.copy()
-    for (x1, y1, x2, y2) in bboxes:
-        cv2.rectangle(out, (x1, y1), (x2, y2), color, thickness)
-    return out
