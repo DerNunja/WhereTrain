@@ -63,8 +63,38 @@ Zug → Gleis_3 → Position = 0.72
 
 ## runtime.py
 
-runtime.py führt alle Komponenten zusammen. Es lädt die definierten Abschnitte (Marker-IDs + Canvasgröße) sowie die zugehörigen H.npy und trackmap.json Dateien. Pro Frame wird nach ArUco-Markern gesucht. Für jeden Abschnitt wird geprüft, ob alle vier Marker sichtbar sind. Sind sie sichtbar, werden aus den Markerpositionen die Quellpunkte bestimmt und per Homographie ein normalisiertes Abschnittsbild erzeugt.
-Auf dem normalisierten Abschnittsbild wird die Zug-Objekterkennung ausgeführt. Für jede Detektion wird die Überlappung mit den Gleis-“Bändern” berechnet und das Gleis mit der höchsten (und ausreichenden) Überlappung gewählt; bei Bedarf wird über Distanz zur Gleis-Polyline oder zeitliche Glättung aufgelöst. Anschließend wird die Position entlang des zugeordneten Gleises durch Projektion auf die Gleis-Polyline bestimmt (z. B. als normierter Wert 0..1).
+lädt aktuell alle `__trackmap.json`-Dateien aus `Mapping/Sections`. Die Abschnittsinformationen (Section-ID, Marker-IDs, Canvas) werden dabei aus dem Dateinamen der Trackmap gelesen
+
+Pro Frame läuft dieser Ablauf:
+
+1. ArUco-Dictionary automatisch wählen und Marker erkennen.
+2. Für jeden Abschnitt Homographie aus sichtbaren Marker-Zentren berechnen.
+3. Falls Marker kurz fehlen: letzte Homographie pro Abschnitt bis `H_TIMEOUT_SEC` weiterverwenden (Cache in-memory).
+4. Auf dem gewarpten Abschnitt Züge per `detect_by_color(...)` detektieren.
+5. Jede BBox über maximale Band-Überlappung einem Gleis zuordnen (`MIN_OVERLAP_PX` als Schwellwert).
+6. Für zugeordnete Gleise Position entlang der Polyline (`s_norm`) und lateralen Abstand berechnen.
+
+Wichtig: Der aktuelle Code implementiert **keine** zeitliche Glättung und **kein** Distanz-basiertes Tie-Breaking bei gleicher Overlap-Fläche; verwendet wird nur die größte Überlappung.
+
+
+## Repository-Überblick (Skripte)
+
+| Skript | Zweck | Typischer Einsatz |
+| --- | --- | --- |
+| `runtime.py` | Führt die komplette Laufzeit-Pipeline aus: Marker erkennen, Abschnitt warpen, Zug detektieren, Detektion auf Gleis mappen, Position entlang des Gleises berechnen. | Online/Offline-Demo für den Gesamtablauf mit Webcam, Bild oder Video. |
+| `extract_train_data.py` | Extrahiert normalisierte Trainingsbilder aus Videos (`data/TrainVid*.mp4`) und speichert nur Frames mit genug relevanten Farbanteilen. | Datensatzerstellung für spätere Modell-Trainingsläufe. |
+| `Mapping/section_tool.py` | Interaktives Tool zum Definieren von Abschnitten über ArUco-Marker und Export normalisierter Abschnittsbilder. | Erster Schritt beim Setup neuer Kameraperspektiven. |
+| `Mapping/map_tool.py` | Interaktives Tool zum Einzeichnen von Gleis-Polylinien und -Bändern auf normalisierten Abschnitten; Export als `__trackmap.json`. | Erstellen oder Pflegen der Gleiskarte pro Abschnitt. |
+| `Detection/Color_detcion/detection_with_color.py` | Einfache farbbasierte Zugdetektion (HSV, Morphologie, größte Komponente -> BBox). | Prototyp/Baseline ohne trainiertes Modell. |
+| `main.py` | Minimales Platzhalter-Entrypoint-Skript. | Aktuell ohne funktionale Pipeline-Relevanz. |
+
+## Schneller Workflow (empfohlen)
+
+1. Mit `Mapping/section_tool.py` Abschnitte definieren und normalisierte Bilder exportieren.
+2. Mit `Mapping/map_tool.py` pro Abschnitt Gleise als Polyline + Band einzeichnen.
+3. Mit `runtime.py` die Laufzeit-Pipeline auf Video/Webcam testen.
+4. Optional mit `extract_train_data.py` zusätzliche normalisierte Trainingsbilder aus Rohvideos erzeugen.
+
 
 ## Mögliche Erweiterungen / Verbesserungen
 
