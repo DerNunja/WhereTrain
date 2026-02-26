@@ -1,4 +1,5 @@
 # Where Train?
+
 Ziel dieses Projekts ist es, die Vorarbeit von **Paul Kellner** zur
 kontextbezogenen Standortbestimmung von Modellzügen zu erweitern.
 ![Aktueller Stand und Erweiterung](Picture1.png)
@@ -15,7 +16,8 @@ Unser Projekt erweitert diesen Ansatz wie folgt:
 > Dadurch wird aus einer binären Anwesenheitsdetektion eine präzise,
 > gleisbasierte Lokalisierung.
 
-### Geleistete Vorarbeit
+## Geleistete Vorarbeit
+
 - Zugriff auf das GitLab-Repository von Paul Kellner ist vorgesehen  
   (aktuell noch Anmeldeprobleme, Zugriff sehr wahrscheinlich)
 - Unabhängig vom Zugriff übernehmen wir **konzeptionell**:
@@ -24,8 +26,11 @@ Unser Projekt erweitert diesen Ansatz wie folgt:
   - Arbeit auf einem **stabilen, normalisierten Kamerabild**
 
 Diese Normalisierung bildet die Grundlage für alle weiteren Schritte.
+
 ## Unser Part
+
 ### Gleisbasierte Lokalisierung
+
 - Arbeiten ausschließlich auf dem **normalisierten Bild**
 - Modellierung jedes Gleises als:
   - schmale Polygonfläche oder *Polygonlinie*
@@ -34,39 +39,50 @@ Diese Normalisierung bildet die Grundlage für alle weiteren Schritte.
   - optional: Segmentationsmasken (für höhere Genauigkeit)
 
 **Zuordnung:**
+
 - Für jede Detektion wird geprüft, **mit welchem Gleispolygon die größte
   Überlappung besteht**
 - Der Zug wird diesem Gleis zugeordnet
-```
+
+```bash
 Zug → Gleis_3
 ```
+
 ### Position auf dem Gleis
+
 Zusätzlich zur Gleis-ID bestimmen wir die **Position entlang des Gleises**:
 
 - Projektion der Zugposition auf die Gleisachse
 - Darstellung als:
   - Pixelposition oder
   - normierter Wert (z. B. 0.0 – 1.0)
-```
+
+```bash
 Zug → Gleis_3 → Position = 0.72
 ```
 
 ## runtime.py
+
 runtime.py führt alle Komponenten zusammen. Es lädt die definierten Abschnitte (Marker-IDs + Canvasgröße) sowie die zugehörigen H.npy und trackmap.json Dateien. Pro Frame wird nach ArUco-Markern gesucht. Für jeden Abschnitt wird geprüft, ob alle vier Marker sichtbar sind. Sind sie sichtbar, werden aus den Markerpositionen die Quellpunkte bestimmt und per Homographie ein normalisiertes Abschnittsbild erzeugt.
 Auf dem normalisierten Abschnittsbild wird die Zug-Objekterkennung ausgeführt. Für jede Detektion wird die Überlappung mit den Gleis-“Bändern” berechnet und das Gleis mit der höchsten (und ausreichenden) Überlappung gewählt; bei Bedarf wird über Distanz zur Gleis-Polyline oder zeitliche Glättung aufgelöst. Anschließend wird die Position entlang des zugeordneten Gleises durch Projektion auf die Gleis-Polyline bestimmt (z. B. als normierter Wert 0..1).
 
 ## Mögliche Erweiterungen / Verbesserungen
+
 ### Aktuelle Einschränkung
+
 - Das Schienennetz muss manuell im Bild modelliert werden
 - Änderungen der Kameraposition oder Perspektive können die Genauigkeit beeinflussen (wie stark muss noch getestet werden)
 - Sollten sich die Marker verschieben, funktioniert das Mapping der Gleise nicht mehr
+
 ### Erweiterungsidee: Automatische Schienenerkennung
+
 Statt manueller Modellierung könnten die Schienen direkt aus dem Bild segmentiert werden.
 > [!NOTE]
 > Automatisierte Schienen Erkennung
 > [Efficient railway track region segmentation algorithm based on lightweight neural network and cross-fusion decoder - ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0926580523003291)
 
 ## Interessante/möglicherweise nützliche Quellen
+
 Automatisierte Schienen Erkennung:
 [Efficient railway track region segmentation algorithm based on lightweight neural network and cross-fusion decoder - ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0926580523003291)
 
