@@ -1,4 +1,5 @@
 # Umsetzung Gleis - Mapping
+
 Hier kann man sehen wie das Mapping umgesetzt werden soll. Die Marker definieren verschiedene Bereiche (hier beispielhaft benannt "Abschnitt 1"). Mithilfe dieser Marker erstellen wir ein Normalisiertes Bild. Hierauf wird anschließend die Objekterkennung der Züge angewendet
 ![Normalisiertes Bild](Pictures/Normalized.png)
 [^1]
@@ -10,7 +11,7 @@ Manuell Mappen wir dann die Gleise für diese Bereiche. So dass auch wir auch mi
 Nach der [[Objekterkennung der Züge]] wird die Gleiskarte auf das normalisierte Bild projiziert. Für jede erkannte Zugdetektion wird geprüft, mit welchem Gleis-Polygon die größte Überlappung besteht. Der Zug wird anschließend diesem Gleis zugeordnet.
 ![Gleis Zuordnung](Pictures/Overlay.png)
 [^3]
-## Was konkret ist der Mapping Prozess?
+
 Der Mapping Prozess fängt damit an, dass wir die einzelnen Bereiche (Gleise) mit Markern markieren. Dabei ist es vorteilhaft wenn alle Marker die gleiche Ausrichtung haben.
 
 Dann werden mit dem ´section_tool.py´ die Abschnitte festgelegt z.B "Bahnhof". Abschnitte können einfach durch das anklicken der Marker erstellt werden. Diese Bereiche werden über ihre Marker definiert (das Tool ermittelt automatisch welche Marker verwendet werden. Sollten Marker verwendet werden welche das Tool nicht kennt müssen diese dem _DICT_CANDIDATES_ hinzugefügt werden). Dabei sollte man sich auf eine Markierungsstratigie einigen, z. B. TL/TR als „außen“ und BL/BR als „innen“.. 
@@ -36,14 +37,16 @@ Der nächste Schritt ist das Mappen der Gleise. Dafür wird das ´map_tool.py´ 
 
 Zweck: Marker-basiert einen oder mehrere Abschnitte auswählen und perspektivisch entzerren.
 
-**Ablauf**
+#### **Ablauf**
+
 1. Eingabebild in `IMAGE_PATH` setzen (oder Webcam aktivieren).
 2. Tool starten und Dictionary automatisch erkennen lassen.
 3. Abschnitt anlegen (`A`) und Canvas-Preset wählen (`1..6`).
 4. Marker-Ecken für den aktiven Abschnitt setzen (`1=TL`, `2=TR`, `3=BR`, `4=BL`, danach Klick auf Marker).
 5. Abschnitt exportieren (`X`) oder alle Abschnitte exportieren (`E`).
 
-**Wichtige Ausgaben**
+#### **Wichtige Ausgaben**
+
 - Normalisierte Abschnittsbilder im Ordner `Mapping/Sections/`.
 - Dateiname enthält `section_id`, Marker-IDs und Canvas-Größe, z. B.:
 
@@ -55,14 +58,16 @@ abschnitt_1__ids=TL1_TR7_BR5_BL2__1280x640__dict=DICT_ARUCO_ORIGINAL.png
 
 Zweck: Auf einem normalisierten Abschnittsbild Gleise und optionale Zonen einzeichnen.
 
-**Ablauf**
+#### **Ablauf**
+
 1. `IMAGE_PATH` auf ein exportiertes Abschnittsbild setzen.
 2. In `track`-Mode Punkte für eine Gleis-Mittellinie klicken.
 3. Mit `ENTER` speichern (Band wird aus Linienbreite automatisch erzeugt).
 4. Optional weitere Gleise oder Zonen (`Z`) einzeichnen.
 5. Mapping mit `S` als `__trackmap.json` speichern.
 
-**Wichtige Shortcuts**
+#### **Wichtige Shortcuts**
+
 - `T`/`Z`: Track-/Zone-Modus
 - `N`: aktuelle Eingabe löschen
 - `BACKSPACE`: letzten Punkt entfernen
@@ -71,10 +76,11 @@ Zweck: Auf einem normalisierten Abschnittsbild Gleise und optionale Zonen einzei
 - `S`: JSON speichern
 - `Q`/`ESC`: beenden
 
-
 ### Offene Frage
+
 **Wie wird das Bild am besten normalisiert?**
 Sollte alles auf ein festes x:y Format normalisiert werden oder sollten die Größen der einzelnen Bereiche mit in Betracht gezogen werden? Also längliche Bereiche in ein eher längliches Format und quadratische Bereich in ein entsprechend quadratisches Format.
+
 #### Spezifische Seitenverhältnisse
 
 | Vorteile                                    | Nachteile                            |
@@ -83,7 +89,9 @@ Sollte alles auf ein festes x:y Format normalisiert werden oder sollten die Grö
 | Gleise behalten ihr natürliches Verhältnis  | Komplexere Pipeline                  |
 | Projektion auf Gleisachsen minimal sauberer | Unterschiedliche Gleiskarten-Formate |
 |                                             | Fusion & Tracking schwerer           |
+
 #### Einheitliches Format (bevorzugt)
+
 Diese Variante wäre leichter um zusetzen 
 
 | Vorteile                                     | Nachteile                                       |
