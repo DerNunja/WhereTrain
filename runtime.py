@@ -416,9 +416,8 @@ def main():
 
                 if tid is not None and tid in track_by_id:
                     s_px, s_norm, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
-                    s_norm_rev = 1.0 - s_norm
                 else:
-                    s_px, s_norm, s_norm_rev, lateral = None, None, None, None
+                    s_px, s_norm, lateral = None, None, None
 
                 print(f"[{s.section_id}] bb={bb} -> track={tid} ov={area} s={s_norm} lat={lateral}")
 
