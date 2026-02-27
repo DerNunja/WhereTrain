@@ -24,7 +24,7 @@ Point = Tuple[int, int]
 USE_IMAGE = False
 USE_VIDEO = True
 USE_WEBCAM = False
-SHOW_DEBUG = True
+SHOW_DEBUG = True  # rendering kostet Zeit, daher optional
 
 WEBCAM_INDEX = 0    #live
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
@@ -110,14 +110,19 @@ def _to_cv_poly(pts: List[Point]) -> Optional[np.ndarray]:
 
 def draw_tracks_overlay(warped: np.ndarray, tracks: List[Track]) -> np.ndarray:
     out = warped.copy()
+    overlay = warped.copy()
 
+    # Fill all bands in one overlay, then blend once
     for tr in tracks:
-        # band polygon (green filled)
         band = _to_cv_poly(tr.band)
         if band is not None and len(tr.band) >= 3:
-            overlay = out.copy()
             cv2.fillPoly(overlay, [band], (0, 255, 0))
-            out = cv2.addWeighted(overlay, 0.18, out, 0.82, 0)
+
+    cv2.addWeighted(overlay, 0.18, out, 0.82, 0, out)
+
+    for tr in tracks:
+        band = _to_cv_poly(tr.band)
+        if band is not None and len(tr.band) >= 3:
             cv2.polylines(out, [band], True, (0, 255, 0), 2)
 
         # center polyline (cyan)
@@ -137,6 +142,37 @@ def draw_bboxes(img: np.ndarray, bboxes: List[Tuple[int, int, int, int]], label=
         cv2.rectangle(out, (x1, y1), (x2, y2), (0, 0, 255), 2)
         cv2.putText(out, label, (x1, max(0, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
     return out
+
+def tile_debug_views(images: List[np.ndarray], cols: int = 2) -> np.ndarray:
+    if not images:
+        return np.zeros((100, 100, 3), dtype=np.uint8)
+
+    normalized: List[np.ndarray] = []
+    max_h, max_w = 0, 0
+    for img in images:
+        if img.ndim == 2:
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+        normalized.append(img)
+        h, w = img.shape[:2]
+        max_h = max(max_h, h)
+        max_w = max(max_w, w)
+
+    padded: List[np.ndarray] = []
+    for img in normalized:
+        h, w = img.shape[:2]
+        pad_b = max_h - h
+        pad_r = max_w - w
+        padded.append(cv2.copyMakeBorder(img, 0, pad_b, 0, pad_r, cv2.BORDER_CONSTANT, value=(0, 0, 0)))
+
+    rows: List[np.ndarray] = []
+    for i in range(0, len(padded), cols):
+        row = padded[i:i + cols]
+        while len(row) < cols:
+            row.append(np.zeros((max_h, max_w, 3), dtype=np.uint8))
+        rows.append(cv2.hconcat(row))
+
+    return cv2.vconcat(rows)
+
 
 
 def polygon_to_mask(poly: List[Point], shape_hw: Tuple[int, int]) -> np.ndarray:
@@ -306,9 +342,20 @@ def main():
             raise RuntimeError(f"Cannot open video source: {src}")
 
     if SHOW_DEBUG:
-        setup_window("Input (detected markers)")
+        setup_window("Debug (combined)")
+
+    # Block-Profiling
+    PROFILE_BLOCKS = True
+    PROFILE_EVERY_N_FRAMES = 30
+    profile_stats: Dict[str, float] = {}
+
+    def add_profile(block: str, elapsed: float):
+        if not PROFILE_BLOCKS:
+            return
+        profile_stats[block] = profile_stats.get(block, 0.0) + elapsed
 
     frame_idx = 0
+    profiled_frames = 0
     prev_frame_ts = time.perf_counter()
     fps_smoothed = 0.0
     last_H: Dict[str, np.ndarray] = {}
@@ -318,6 +365,9 @@ def main():
     detector = None
 
     while True:
+        t_frame_start = time.perf_counter()
+
+        t0 = time.perf_counter()
         if USE_IMAGE:
             frame = single_image.copy()
             ok = True
@@ -336,6 +386,7 @@ def main():
             ok, frame = cap.read()
             if not ok or frame is None:
                 break  # end of video
+        add_profile("frame_acquire", time.perf_counter() - t0)
 
         frame_idx += 1
         now_perf = time.perf_counter()
@@ -348,32 +399,45 @@ def main():
         if PROCESS_EVERY_NTH_FRAME > 1 and (frame_idx % PROCESS_EVERY_NTH_FRAME) != 0:
             continue
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        profiled_frames += 1
 
-        # 1) autodetect dictionary (from helpers)
+        debug_views: List[np.ndarray] = []
+
+        t0 = time.perf_counter()
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        add_profile("grayscale", time.perf_counter() - t0)
+
+        # 1) autodetect dictionary once, then reuse detector
         if detector is None:
+            t0 = time.perf_counter()
             count, dict_name, dict_id = autodetect_dictionary(gray)
             detector = make_detector(dict_id)
+            add_profile("autodetect_once", time.perf_counter() - t0)
             print(f"Autodetected dictionary: {dict_name} (markers: {count})")
 
-
+        t0 = time.perf_counter()
         corners, ids = detect_markers(gray, detector)
+        add_profile("marker_detect", time.perf_counter() - t0)
 
         # Debug input
+        t0 = time.perf_counter()
         if SHOW_DEBUG:
             vis_in = frame.copy()
             if ids is not None and len(ids) > 0:
                 cv2.aruco.drawDetectedMarkers(vis_in, corners, ids)
             cv2.putText(vis_in, f"FPS: {fps_smoothed:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
-            cv2.imshow("Input (detected markers)", vis_in)
+            debug_views.append(vis_in)
+        add_profile("debug_input_render", time.perf_counter() - t0)
 
         have_markers = (ids is not None and len(ids) > 0)
 
         # 2) build id -> corners(4,2)
+        t0 = time.perf_counter()
         id_to_corners: Dict[int, np.ndarray] = {}
         if have_markers:
             for i, mid in enumerate(ids.flatten().tolist()):
                 id_to_corners[int(mid)] = corners[i].reshape(4, 2)
+        add_profile("id_corner_map", time.perf_counter() - t0)
 
         # 3) process each section
         now = time.time()
@@ -383,6 +447,7 @@ def main():
             warped = None
 
             # Versuch: neue Homographie aus aktuellen Markern
+            t0 = time.perf_counter()
             if have_markers:
                 src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
                 if src_pts is not None:
@@ -392,8 +457,10 @@ def main():
                     last_H[s.section_id] = H_new
                     last_H_time[s.section_id] = now
                     H_use = H_new
+            add_profile("section_homography", time.perf_counter() - t0)
 
             # Fallback: letzte Homographie nutzen, wenn frisch genug
+            t0 = time.perf_counter()
             if warped is None:
                 H_cached = last_H.get(s.section_id)
                 t_cached = last_H_time.get(s.section_id, -1.0)
@@ -404,11 +471,15 @@ def main():
                 else:
                     # kein gültiger Warp möglich
                     continue
+            add_profile("section_fallback", time.perf_counter() - t0)
 
             # 4) run train detection on normalized image
+            t0 = time.perf_counter()
             bboxes = detect_trains_stub(warped)
+            add_profile("section_train_detect", time.perf_counter() - t0)
 
             # 5) assign boxes to tracks
+            t0 = time.perf_counter()
             shape_hw = (s.canvas[1], s.canvas[0])
             assignments = []
 
@@ -425,27 +496,33 @@ def main():
                     s_px, s_norm, lateral = None, None, None
 
                 print(f"[{s.section_id}] bb={bb} -> track={tid} ov={area} s={s_norm} lat={lateral}")
-
+            add_profile("section_assignment", time.perf_counter() - t0)
 
             # 6) visualize
+            t0 = time.perf_counter()
             out = draw_tracks_overlay(warped, s.tracks)
             out = draw_bboxes(out, bboxes, "train")
 
             if SHOW_DEBUG:
-                win_name = f"Warped+Tracks [{s.section_id}]"
-                setup_window(win_name)
-
                 # kleine Statusanzeige: ob H neu oder cached
                 status = "H:NEW" if (have_markers and s.section_id in last_H_time and abs(last_H_time[s.section_id] - now) < 1e-3) else "H:CACHED"
-                cv2.putText(out, status, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-                cv2.putText(out, f"FPS: {fps_smoothed:.1f}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-                cv2.imshow(win_name, out)
+                cv2.putText(out, s.section_id, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                cv2.putText(out, status, (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+                cv2.putText(out, f"FPS: {fps_smoothed:.1f}", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+                debug_views.append(out)
+            add_profile("section_visualize", time.perf_counter() - t0)
 
             for (bb, tid, area) in assignments:
                 if tid is not None:
                     print(f"[frame {frame_idx:06d}][{s.section_id}] bbox={bb} -> track={tid} overlap_px={area}")
 
+        t0 = time.perf_counter()
+        if SHOW_DEBUG and debug_views:
+            debug_canvas = tile_debug_views(debug_views, cols=2)
+            cv2.imshow("Debug (combined)", debug_canvas)
+        add_profile("debug_combined_render", time.perf_counter() - t0)
 
+        t0 = time.perf_counter()
         # Key handling
         key = cv2.waitKey(1) & 0xFF
         if key == 27:          # ESC
@@ -460,6 +537,29 @@ def main():
             # For images we process exactly once
             cv2.waitKey(0)
             break
+        add_profile("key_handling", time.perf_counter() - t0)
+
+        add_profile("frame_total", time.perf_counter() - t_frame_start)
+
+        if PROFILE_BLOCKS and (profiled_frames % PROFILE_EVERY_N_FRAMES == 0):
+            print("\n[PROFILE] avg block times (ms)")
+            sorted_blocks = sorted(
+                profile_stats.items(),
+                key=lambda kv: (kv[1] / max(profiled_frames, 1)),
+                reverse=True,
+            )
+            for name, total in sorted_blocks:
+                print(f"  - {name:20s}: {(total / profiled_frames) * 1000.0:8.3f}")
+
+    if PROFILE_BLOCKS and profiled_frames > 0:
+        print("\n[PROFILE] final avg block times (ms)")
+        sorted_blocks = sorted(
+            profile_stats.items(),
+            key=lambda kv: (kv[1] / max(profiled_frames, 1)),
+            reverse=True,
+        )
+        for name, total in sorted_blocks:
+            print(f"  - {name:20s}: {(total / profiled_frames) * 1000.0:8.3f}")
 
     if cap is not None:
         cap.release()
