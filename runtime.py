@@ -309,6 +309,8 @@ def main():
         setup_window("Input (detected markers)")
 
     frame_idx = 0
+    prev_frame_ts = time.perf_counter()
+    fps_smoothed = 0.0
     last_H: Dict[str, np.ndarray] = {}
     last_H_time: Dict[str, float] = {}
     paused = False
@@ -334,6 +336,13 @@ def main():
                 break  # end of video
 
         frame_idx += 1
+        now_perf = time.perf_counter()
+        dt = now_perf - prev_frame_ts
+        prev_frame_ts = now_perf
+        if dt > 0:
+            fps_current = 1.0 / dt
+            fps_smoothed = fps_current if fps_smoothed <= 0 else (0.9 * fps_smoothed + 0.1 * fps_current)
+
         if PROCESS_EVERY_NTH_FRAME > 1 and (frame_idx % PROCESS_EVERY_NTH_FRAME) != 0:
             continue
 
@@ -350,6 +359,7 @@ def main():
             vis_in = frame.copy()
             if ids is not None and len(ids) > 0:
                 cv2.aruco.drawDetectedMarkers(vis_in, corners, ids)
+            cv2.putText(vis_in, f"FPS: {fps_smoothed:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
             cv2.imshow("Input (detected markers)", vis_in)
 
         have_markers = (ids is not None and len(ids) > 0)
@@ -424,7 +434,7 @@ def main():
                 # kleine Statusanzeige: ob H neu oder cached
                 status = "H:NEW" if (have_markers and s.section_id in last_H_time and abs(last_H_time[s.section_id] - now) < 1e-3) else "H:CACHED"
                 cv2.putText(out, status, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-
+                cv2.putText(out, f"FPS: {fps_smoothed:.1f}", (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
                 cv2.imshow(win_name, out)
 
             for (bb, tid, area) in assignments:
