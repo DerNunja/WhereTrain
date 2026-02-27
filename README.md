@@ -63,19 +63,21 @@ Zug → Gleis_3 → Position = 0.72
 
 ## runtime.py
 
-lädt aktuell alle `__trackmap.json`-Dateien aus `Mapping/Sections`. Die Abschnittsinformationen (Section-ID, Marker-IDs, Canvas) werden dabei aus dem Dateinamen der Trackmap gelesen
+Einmalig beim Start:
+
+ArUco-Dictionary wird automatisch aus dem ersten Frame bestimmt und für alle folgenden Frames wiederverwendet (`autodetect_dictionary` läuft nur einmal).
+Ein einzelner ArucoDetector wird erstellt und in dem gesamten Loop genutzt.
 
 Pro Frame läuft dieser Ablauf:
 
-1. ArUco-Dictionary automatisch wählen und Marker erkennen.
+1. Marker im Eingabebild erkennen (mit festem Dictionary).
 2. Für jeden Abschnitt Homographie aus sichtbaren Marker-Zentren berechnen.
 3. Falls Marker kurz fehlen: letzte Homographie pro Abschnitt bis `H_TIMEOUT_SEC` weiterverwenden (Cache in-memory).
-4. Auf dem gewarpten Abschnitt Züge per `detect_by_color(...)` detektieren.
+4. Auf dem gewarpten Abschnitt Züge per `detect_by_color(...)` (Platzhalter für Yolo) detektieren.
 5. Jede BBox über maximale Band-Überlappung einem Gleis zuordnen (`MIN_OVERLAP_PX` als Schwellwert).
 6. Für zugeordnete Gleise Position entlang der Polyline (`s_norm`) und lateralen Abstand berechnen.
 
-Wichtig: Der aktuelle Code implementiert **keine** zeitliche Glättung und **kein** Distanz-basiertes Tie-Breaking bei gleicher Overlap-Fläche; verwendet wird nur die größte Überlappung.
-
+Wichtig: Der aktuelle Code implementiert keine zeitliche Glättung und kein Distanz-basiertes Tie-Breaking bei gleicher Overlap-Fläche; verwendet wird nur die größte Überlappung. Bekannte Performance-Engpässe liegen im Debug-Rendering (`draw_tracks_overlay`, mehrere imshow-Fenster) sowie in der farbbasierten Detektion — mit `SHOW_DEBUG = False` lässt sich der Durchsatz deutlich steigern.
 
 ## Repository-Überblick (Skripte)
 

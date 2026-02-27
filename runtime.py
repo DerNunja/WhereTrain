@@ -17,7 +17,9 @@ from Mapping.helper_section_tool import (
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
-from Detection.Color_detcion.detection_with_color import detect_by_color
+# from Detection.Color_detcion.detection_with_color import detect_by_color  # <-- auskommentiert
+
+from Detection.YOLO.yolo_model import get_yolo_model, detect_trains_yolo
 
 Point = Tuple[int, int]
 
@@ -30,6 +32,8 @@ WEBCAM_INDEX = 0    #live
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
 VIDEO_PATH = "data/TestVid3.mp4"
 TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
+
+YOLO_MODEL_PATH = "Detection/YOLO/best.pt"
 
 # optional: Video-Performance
 PROCESS_EVERY_NTH_FRAME = 1   # 1 = jeden Frame, 2 = jeden 2ten, ...
@@ -304,10 +308,6 @@ def position_on_track(center: PtF, track_polyline: List[Point]) -> Tuple[float, 
     return best_s, s_norm, lateral
 #------------------------------------------------Code Firas ------------------------------------------------
 
-# detection modell
-def detect_trains_stub(warped_bgr: np.ndarray) -> List[Tuple[int, int, int, int]]:
-    return detect_by_color(warped_bgr, min_area=400, morph_kernel=5, morph_iters=2)
-
 
 def warp_with_H(frame_bgr: np.ndarray, H: np.ndarray, canvas: Tuple[int, int]) -> np.ndarray:
     """Warp via cv2.warpPerspective direkt mit gegebener Homography."""
@@ -323,6 +323,9 @@ def main():
     print(f"Loaded {len(sections)} sections:")
     for s in sections:
         print(f" - {s.section_id} canvas={s.canvas} ids={s.corner_ids} tracks={len(s.tracks)}")
+
+    # YOLO Modell beim Start laden (einmalig)
+    get_yolo_model(YOLO_MODEL_PATH)
 
     cap = None
     single_image = None
@@ -473,9 +476,10 @@ def main():
                     continue
             add_profile("section_fallback", time.perf_counter() - t0)
 
-            # 4) run train detection on normalized image
+            # 4) Zugdetektion mit YOLO auf normalisiertem Bild
             t0 = time.perf_counter()
-            bboxes = detect_trains_stub(warped)
+            # bboxes = detect_by_color(warped, min_area=400, morph_kernel=5, morph_iters=2)  # <-- auskommentiert
+            bboxes = detect_trains_yolo(warped)
             add_profile("section_train_detect", time.perf_counter() - t0)
 
             # 5) assign boxes to tracks
