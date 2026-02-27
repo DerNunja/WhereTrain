@@ -1,8 +1,0 @@
-path: C:/Users/Zayd Maatouf/Desktop/data
-
-train: images/Train
-val: images/Validation
-test: images/Test
-
-names:
-  0: Zug
