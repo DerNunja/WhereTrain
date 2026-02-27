@@ -8,4 +8,5 @@ dependencies = [
     "opencv-contrib-python>=4.13.0.92",
     "opencv-python>=4.13.0.92",
     "plotly>=6.5.2",
+    "ultralytics>=8.4.18",
 ]
