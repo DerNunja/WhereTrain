@@ -314,6 +314,8 @@ def main():
     last_H: Dict[str, np.ndarray] = {}
     last_H_time: Dict[str, float] = {}
     paused = False
+    dict_name = None
+    detector = None
 
     while True:
         if USE_IMAGE:
@@ -349,8 +351,11 @@ def main():
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         # 1) autodetect dictionary (from helpers)
-        count, dict_name, dict_id = autodetect_dictionary(gray)
-        detector = make_detector(dict_id)
+        if detector is None:
+            count, dict_name, dict_id = autodetect_dictionary(gray)
+            detector = make_detector(dict_id)
+            print(f"Autodetected dictionary: {dict_name} (markers: {count})")
+
 
         corners, ids = detect_markers(gray, detector)
 
