@@ -30,14 +30,12 @@ SHOW_DEBUG = True  # rendering kostet Zeit, daher optional
 
 WEBCAM_INDEX = 0    #live
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
-VIDEO_PATH = "data/TestVid3.mp4"
+VIDEO_PATH = "data/TestVid2.mp4"
 TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
-
-YOLO_MODEL_PATH = "Detection/YOLO/best.pt"
 
 # optional: Video-Performance
 PROCESS_EVERY_NTH_FRAME = 1   # 1 = jeden Frame, 2 = jeden 2ten, ...
-H_TIMEOUT_SEC = 8.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
+H_TIMEOUT_SEC = 60.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
 
 MIN_OVERLAP_PX = 50
 WIN_W, WIN_H = 1280, 720
@@ -325,7 +323,7 @@ def main():
         print(f" - {s.section_id} canvas={s.canvas} ids={s.corner_ids} tracks={len(s.tracks)}")
 
     # YOLO Modell beim Start laden (einmalig)
-    get_yolo_model(YOLO_MODEL_PATH)
+    get_yolo_model()
 
     cap = None
     single_image = None
