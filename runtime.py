@@ -39,12 +39,12 @@ SHOW_DEBUG = True  # rendering kostet Zeit, daher optional
 
 WEBCAM_INDEX = 0    #live
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
-VIDEO_PATH = "data/TestVid3.mp4"
+VIDEO_PATH = "data/TestVid2.mp4"
 TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
 
 # optional: Video-Performance
 PROCESS_EVERY_NTH_FRAME = 1   # 1 = jeden Frame, 2 = jeden 2ten, ...
-H_TIMEOUT_SEC = 8.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
+H_TIMEOUT_SEC = 60.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
 
 MIN_OVERLAP_PX = 50
 WIN_W, WIN_H = 1280, 720
@@ -506,7 +506,6 @@ def main():
             t0 = time.perf_counter()
             shape_hw = (s.canvas[1], s.canvas[0])
             track_by_id = {tr.track_id: tr for tr in s.tracks}
-            track_states: Dict[str, TrackState] = {}
             assignment_results: List[Dict[str, Any]] = []
 
             for bb in bboxes:
