@@ -3,9 +3,10 @@
 Ziel dieses Projekts ist es, die Vorarbeit von **Paul Kellner** zur
 kontextbezogenen Standortbestimmung von Modellzügen zu erweitern.
 ![Aktueller Stand und Erweiterung](Picture1.png)
+
 Die Arbeit von Paul beantwortet die Frage:
 
-> **„Befindet sich ein Zug innerhalb einer definierten Standortzone (rot)?“**
+> **„Befindet sich ein Zug innerhalb einer definierten Standortzone (rot)?"**
 
 Unser Projekt erweitert diesen Ansatz wie folgt:
 
@@ -14,16 +15,15 @@ Unser Projekt erweitert diesen Ansatz wie folgt:
 > die Lokalisierung, indem wir die Zone in einzelne Gleise (grün) unterteilen und
 > zusätzlich die Position des Zuges entlang eines konkreten Gleises bestimmen (schwarzes Kreuz).
 > Dadurch wird aus einer binären Anwesenheitsdetektion eine präzise,
-> gleisbasierte Lokalisierung.
+> gleisbasierte Lokalisierung mit Fahrtrichtung.
 
 ## Geleistete Vorarbeit
 
-- Zugriff auf das GitLab-Repository von Paul Kellner ist vorgesehen  
-  (aktuell noch Anmeldeprobleme, Zugriff sehr wahrscheinlich)
-- Unabhängig vom Zugriff übernehmen wir **konzeptionell**:
-  - Nutzung von **ArUco-Markern**
-  - **Homographie-basierte Kamera-Normalisierung**
-  - Arbeit auf einem **stabilen, normalisierten Kamerabild**
+Konzeptionell übernommen von Paul Kellner:
+- Nutzung von **ArUco-Markern**
+- **Homographie-basierte Kamera-Normalisierung**
+- Arbeit auf einem **stabilen, normalisierten Kamerabild**
+- **YOLO-basierte** Zugdetektion
 
 Diese Normalisierung bildet die Grundlage für alle weiteren Schritte.
 
@@ -31,63 +31,66 @@ Diese Normalisierung bildet die Grundlage für alle weiteren Schritte.
 
 ### Gleisbasierte Lokalisierung
 
-- Arbeiten ausschließlich auf dem **normalisierten Bild**
-- Modellierung jedes Gleises als:
-  - schmale Polygonfläche oder *Polygonlinie*
-- Detektierte Züge:
-  - Bounding Boxes (Baseline)
-  - optional: Segmentationsmasken (für höhere Genauigkeit)
+- Modellierung jedes Gleises als Polylinien mit **Bandbreite** (Polygon)
+- Zugdetektion per **YOLO** auf GPU mit Batch-Inferenz über alle Sections
+- Gleiszuordnung über **maximale Polygon-Überlappung** der BBox mit dem Gleisband
 
-**Zuordnung:**
-
-- Für jede Detektion wird geprüft, **mit welchem Gleispolygon die größte
-  Überlappung besteht**
-- Der Zug wird diesem Gleis zugeordnet
-
-```bash
+```
 Zug → Gleis_3
 ```
 
 ### Position auf dem Gleis
 
-Zusätzlich zur Gleis-ID bestimmen wir die **Position entlang des Gleises**:
+Zusätzlich zur Gleis-ID wird die **Position entlang des Gleises** berechnet:
 
-- Projektion der Zugposition auf die Gleisachse
-- Darstellung als:
-  - Pixelposition oder
-  - normierter Wert (z. B. 0.0 – 1.0)
+- Projektion des Zugmittelpunkts auf die Gleisachse (Polyline)
+- Ausgabe als normierter Wert (0.0 – 1.0) und lateraler Abstand zur Gleismitte
 
-```bash
+```
 Zug → Gleis_3 → Position = 0.72
+```
+
+### Fahrtrichtung
+
+Aus dem zeitlichen Verlauf der Position wird die **Fahrtrichtung** bestimmt:
+
+- Zeitliche Glättung der Rohposition über ein gleitendes Fenster (`SMOOTH_WINDOW`)
+- Richtungsentscheidung über Vergleich von ältestem und neuestem geglätteten Wert (`DIRECTION_WINDOW`)
+- Ausgabe: `→` vorwärts, `←` rückwärts, `·` stillstehend
+
+```
+Zug → Gleis_3 → Position = 0.72 → Richtung: →
 ```
 
 ## runtime.py
 
 Einmalig beim Start:
 
-ArUco-Dictionary wird automatisch aus dem ersten Frame bestimmt und für alle folgenden Frames wiederverwendet (`autodetect_dictionary` läuft nur einmal).
-Ein einzelner ArucoDetector wird erstellt und in dem gesamten Loop genutzt.
+- ArUco-Dictionary wird automatisch aus dem ersten Frame bestimmt und für alle folgenden Frames wiederverwendet.
+- YOLO-Modell wird einmalig auf die GPU geladen.
 
 Pro Frame läuft dieser Ablauf:
 
 1. Marker im Eingabebild erkennen (mit festem Dictionary).
 2. Für jeden Abschnitt Homographie aus sichtbaren Marker-Zentren berechnen.
 3. Falls Marker kurz fehlen: letzte Homographie pro Abschnitt bis `H_TIMEOUT_SEC` weiterverwenden (Cache in-memory).
-4. Auf dem gewarpten Abschnitt Züge per `detect_by_color(...)` (Platzhalter für Yolo) detektieren.
+4. Alle gewarpten Abschnitte in einem **Batch-GPU-Aufruf** per YOLO detektieren.
 5. Jede BBox über maximale Band-Überlappung einem Gleis zuordnen (`MIN_OVERLAP_PX` als Schwellwert).
-6. Für zugeordnete Gleise Position entlang der Polyline (`s_norm`) und lateralen Abstand berechnen.
+6. Für zugeordnete Gleise Position entlang der Polyline (`s_norm`), lateralen Abstand und Fahrtrichtung berechnen.
 
-Wichtig: Der aktuelle Code implementiert keine zeitliche Glättung und kein Distanz-basiertes Tie-Breaking bei gleicher Overlap-Fläche; verwendet wird nur die größte Überlappung. Bekannte Performance-Engpässe liegen im Debug-Rendering (`draw_tracks_overlay`, mehrere imshow-Fenster) sowie in der farbbasierten Detektion — mit `SHOW_DEBUG = False` lässt sich der Durchsatz deutlich steigern.
+Wichtig: Der Code implementiert kein Distanz-basiertes Tie-Breaking bei gleicher Overlap-Fläche; verwendet wird nur die größte Überlappung. Mit `SHOW_DEBUG = False` lässt sich der Durchsatz deutlich steigern (~50 FPS auf Nvidia GPU).
 
 ## Repository-Überblick (Skripte)
 
 | Skript | Zweck | Typischer Einsatz |
 | --- | --- | --- |
-| `runtime.py` | Führt die komplette Laufzeit-Pipeline aus: Marker erkennen, Abschnitt warpen, Zug detektieren, Detektion auf Gleis mappen, Position entlang des Gleises berechnen. | Online/Offline-Demo für den Gesamtablauf mit Webcam, Bild oder Video. |
+| `runtime.py` | Führt die komplette Laufzeit-Pipeline aus: Marker erkennen, Abschnitt warpen, Zug detektieren, Detektion auf Gleis mappen, Position und Fahrtrichtung berechnen. | Online/Offline-Demo für den Gesamtablauf mit Webcam, Bild oder Video. |
+| `track_state.py` | Zeitliche Glättung der Zugposition und Fahrtrichtungserkennung pro Gleis. | Wird von `runtime.py` importiert. |
 | `extract_train_data.py` | Extrahiert normalisierte Trainingsbilder aus Videos (`data/TrainVid*.mp4`) und speichert nur Frames mit genug relevanten Farbanteilen. | Datensatzerstellung für spätere Modell-Trainingsläufe. |
 | `Mapping/section_tool.py` | Interaktives Tool zum Definieren von Abschnitten über ArUco-Marker und Export normalisierter Abschnittsbilder. | Erster Schritt beim Setup neuer Kameraperspektiven. |
 | `Mapping/map_tool.py` | Interaktives Tool zum Einzeichnen von Gleis-Polylinien und -Bändern auf normalisierten Abschnitten; Export als `__trackmap.json`. | Erstellen oder Pflegen der Gleiskarte pro Abschnitt. |
-| `Detection/Color_detcion/detection_with_color.py` | Einfache farbbasierte Zugdetektion (HSV, Morphologie, größte Komponente -> BBox). | Prototyp/Baseline ohne trainiertes Modell. |
+| `Detection/Color_detcion/detection_with_color.py` | Einfache farbbasierte Zugdetektion (HSV, Morphologie, größte Komponente → BBox). | Prototyp/Baseline ohne trainiertes Modell. |
+| `Detection/YOLO/yolo_model.py` | YOLO-basierte Zugdetektion auf GPU, unterstützt Batch-Inferenz über mehrere Sections. | Wird von `runtime.py` importiert. |
 | `main.py` | Minimales Platzhalter-Entrypoint-Skript. | Aktuell ohne funktionale Pipeline-Relevanz. |
 
 ## Schneller Workflow (empfohlen)
@@ -97,24 +100,42 @@ Wichtig: Der aktuelle Code implementiert keine zeitliche Glättung und kein Dist
 3. Mit `runtime.py` die Laufzeit-Pipeline auf Video/Webcam testen.
 4. Optional mit `extract_train_data.py` zusätzliche normalisierte Trainingsbilder aus Rohvideos erzeugen.
 
+## Konfiguration
+
+Relevante Konstanten in `runtime.py`:
+
+| Konstante | Standard | Bedeutung |
+| --- | --- | --- |
+| `SHOW_DEBUG` | `True` | Debug-Fenster mit Overlay anzeigen |
+| `PROCESS_EVERY_NTH_FRAME` | `1` | Jeden N-ten Frame verarbeiten |
+| `H_TIMEOUT_SEC` | `8.0` | Sekunden bis gecachte Homographie verfällt |
+| `MIN_OVERLAP_PX` | `50` | Mindest-Überlappung für Gleiszuordnung |
+
+Relevante Konstanten in `track_state.py`:
+
+| Konstante | Standard | Bedeutung |
+| --- | --- | --- |
+| `SMOOTH_WINDOW` | `5` | Frames für die Positionsglättung |
+| `DIRECTION_WINDOW` | `8` | Frames für die Richtungsentscheidung |
+| `DIRECTION_THRESHOLD` | `0.003` | Minimale s_norm-Änderung für Richtungserkennung |
 
 ## Mögliche Erweiterungen / Verbesserungen
 
-### Aktuelle Einschränkung
+### Aktuelle Einschränkungen
 
 - Das Schienennetz muss manuell im Bild modelliert werden
-- Änderungen der Kameraposition oder Perspektive können die Genauigkeit beeinflussen (wie stark muss noch getestet werden)
+- Änderungen der Kameraposition oder Perspektive können die Genauigkeit beeinflussen
 - Sollten sich die Marker verschieben, funktioniert das Mapping der Gleise nicht mehr
+- YOLO verwendet Axis-Aligned Bounding Boxes — bei schräg liegenden Gleisen könnten Oriented Bounding Boxes (wie in Pauls Arbeit) die Gleiszuordnung verbessern
 
 ### Erweiterungsidee: Automatische Schienenerkennung
 
 Statt manueller Modellierung könnten die Schienen direkt aus dem Bild segmentiert werden.
 > [!NOTE]
-> Automatisierte Schienen Erkennung
+> Automatisierte Schienenerkennung:
 > [Efficient railway track region segmentation algorithm based on lightweight neural network and cross-fusion decoder - ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0926580523003291)
 
 ## Interessante/möglicherweise nützliche Quellen
 
-Automatisierte Schienen Erkennung:
+Automatisierte Schienenerkennung:
 [Efficient railway track region segmentation algorithm based on lightweight neural network and cross-fusion decoder - ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0926580523003291)
-
