@@ -6,6 +6,7 @@ from typing import Dict, Tuple, Optional, List, Any
 
 import cv2
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from Mapping.helper_section_tool import (
     autodetect_dictionary,
@@ -17,18 +18,9 @@ from Mapping.helper_section_tool import (
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
-from Detection.Color_detcion.detection_with_color import detect_by_color # nicht direkt benötigt
+# from Detection.Color_detcion.detection_with_color import detect_by_color  # <-- auskommentiert
 
 from Detection.YOLO.yolo_model import get_yolo_model, detect_trains_yolo_batch
-
-from track_state import (
-    DIRECTION_BACKWARD,
-    DIRECTION_FORWARD,
-    DIRECTION_STILL,
-    TrackState,
-    get_or_create_state,
-)
-
 
 Point = Tuple[int, int]
 
@@ -39,7 +31,7 @@ SHOW_DEBUG = True  # rendering kostet Zeit, daher optional
 
 WEBCAM_INDEX = 0    #live
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
-VIDEO_PATH = "data/TestVid2.mp4"
+VIDEO_PATH = "data/TestVid3.mp4"
 TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
 
 # optional: Video-Performance
@@ -48,18 +40,6 @@ H_TIMEOUT_SEC = 60.0   # solange (in Sekunden) darf alte H genutzt werden, wenn 
 
 MIN_OVERLAP_PX = 50
 WIN_W, WIN_H = 1280, 720
-
-DIR_ARROW = {
-    DIRECTION_FORWARD: "→",
-    DIRECTION_BACKWARD: "←",
-    DIRECTION_STILL: "·",
-}
-
-DIR_COLOR = {
-    DIRECTION_FORWARD: (0, 255, 0),
-    DIRECTION_BACKWARD: (0, 255, 0),
-    DIRECTION_STILL: (180, 180, 180),
-}
 
 
 def setup_window(name: str):
@@ -334,6 +314,40 @@ def warp_with_H(frame_bgr: np.ndarray, H: np.ndarray, canvas: Tuple[int, int]) -
     return cv2.warpPerspective(frame_bgr, H, (w, h))
 
 
+def warp_section(
+    s: "Section",
+    frame: np.ndarray,
+    have_markers: bool,
+    id_to_corners: Dict[int, np.ndarray],
+    last_H: Dict[str, np.ndarray],
+    last_H_time: Dict[str, float],
+    now: float,
+) -> Tuple[Optional["Section"], Optional[np.ndarray], Optional[np.ndarray]]:
+    """
+    Berechnet den Warp für eine Section.
+    Thread-safe: liest nur auf frame/id_to_corners, schreibt nichts in shared state.
+    Gibt (section, warped, H_new) zurück — H_new ist None wenn Fallback genutzt wurde.
+    """
+    warped = None
+    H_new = None
+
+    if have_markers:
+        src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
+        if src_pts is not None:
+            warped, H_new = warp(frame, src_pts, s.canvas)
+
+    if warped is None:
+        H_cached = last_H.get(s.section_id)
+        t_cached = last_H_time.get(s.section_id, -1.0)
+        if H_cached is not None and (now - t_cached) <= H_TIMEOUT_SEC:
+            warped = warp_with_H(frame, H_cached, s.canvas)
+
+    if warped is None:
+        return None, None, None
+
+    return s, warped, H_new
+
+
 def main():
     sections = load_sections(TRACKMAP_DIR)
     if not sections:
@@ -382,8 +396,6 @@ def main():
     fps_smoothed = 0.0
     last_H: Dict[str, np.ndarray] = {}
     last_H_time: Dict[str, float] = {}
-    track_states: Dict[str, TrackState] = {}
-    
     paused = False
     dict_name = None
     detector = None
@@ -463,35 +475,33 @@ def main():
                 id_to_corners[int(mid)] = corners[i].reshape(4, 2)
         add_profile("id_corner_map", time.perf_counter() - t0)
 
-        # 3) Alle Sections warpen (CPU) — dann YOLO einmal als Batch (GPU)
+        # 3) Alle Sections parallel warpen (CPU Threads) — dann YOLO einmal als Batch (GPU)
         now = time.time()
 
         active_sections = []  # [(section, warped), ...]
 
-        for s in sections:
-            warped = None
-
-            t0 = time.perf_counter()
-            if have_markers:
-                src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
-                if src_pts is not None:
-                    warped, H_new = warp(frame, src_pts, s.canvas)
-                    last_H[s.section_id] = H_new
-                    last_H_time[s.section_id] = now
-            add_profile("section_homography", time.perf_counter() - t0)
-
-            t0 = time.perf_counter()
-            if warped is None:
-                H_cached = last_H.get(s.section_id)
-                t_cached = last_H_time.get(s.section_id, -1.0)
-                if H_cached is not None and (now - t_cached) <= H_TIMEOUT_SEC:
-                    warped = warp_with_H(frame, H_cached, s.canvas)
-                else:
-                    add_profile("section_fallback", time.perf_counter() - t0)
+        t0 = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=min(len(sections), 8)) as executor:
+            futures = {
+                executor.submit(
+                    warp_section, s, frame, have_markers, id_to_corners, last_H, last_H_time, now
+                ): s
+                for s in sections
+            }
+            for future in as_completed(futures):
+                s_result, warped, H_new = future.result()
+                if s_result is None or warped is None:
                     continue
-            add_profile("section_fallback", time.perf_counter() - t0)
+                # H-Cache update (main thread, nach den Threads)
+                if H_new is not None:
+                    last_H[s_result.section_id] = H_new
+                    last_H_time[s_result.section_id] = now
+                active_sections.append((s_result, warped))
+        add_profile("section_homography", time.perf_counter() - t0)
 
-            active_sections.append((s, warped))
+        # Reihenfolge stabilisieren (as_completed ist nicht deterministisch)
+        section_order = {s.section_id: i for i, s in enumerate(sections)}
+        active_sections.sort(key=lambda x: section_order.get(x[0].section_id, 0))
 
         # 4) Batch-Inferenz: alle gewarpten Bilder in einem GPU-Aufruf
         t0 = time.perf_counter()
@@ -506,50 +516,22 @@ def main():
             t0 = time.perf_counter()
             shape_hw = (s.canvas[1], s.canvas[0])
             track_by_id = {tr.track_id: tr for tr in s.tracks}
-            assignment_results: List[Dict[str, Any]] = []
 
             for bb in bboxes:
                 tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
                 cx, cy = bbox_center(bb)
 
                 if tid is not None and tid in track_by_id:
-                    _s_px, s_norm_raw, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
-                    state = get_or_create_state(track_states, s.section_id, tid)
-                    s_norm_smooth, direction = state.update(s_norm_raw)
-
-                    assignment_results.append(
-                        {
-                            "bbox": bb,
-                            "track_id": tid,
-                            "s_norm": s_norm_smooth,
-                            "direction": direction,
-                        }
-                    )
-
-                    print(
-                        f"[{s.section_id}] {tid} | pos={s_norm_smooth:.3f} | "
-                        f"dir={DIR_ARROW.get(direction, '?')} | lat={lateral:.1f}px | ov={area}"
-                    )
+                    s_px, s_norm, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
                 else:
-                    print(f"[{s.section_id}] bb={bb} -> track=None ov={area}")
+                    s_px, s_norm, lateral = None, None, None
 
+                print(f"[{s.section_id}] bb={bb} -> track={tid} ov={area} s={s_norm} lat={lateral}")
             add_profile("section_assignment", time.perf_counter() - t0)
 
             t0 = time.perf_counter()
             out = draw_tracks_overlay(warped, s.tracks)
             out = draw_bboxes(out, bboxes, "train")
-
-            for result in assignment_results:
-                x1, y1, _, _ = result["bbox"]
-                direction = result["direction"]
-                track_id = result["track_id"]
-                s_norm = result["s_norm"]
-                color = DIR_COLOR.get(direction, (180, 180, 180))
-                arrow = DIR_ARROW.get(direction, "?")
-
-                cv2.putText(out, f"{track_id} {arrow}", (x1, max(20, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
-                cv2.putText(out, f"s={s_norm:.3f}", (x1, max(40, y1 + 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
 
             if SHOW_DEBUG:
                 status = "H:NEW" if (have_markers and s.section_id in last_H_time and abs(last_H_time[s.section_id] - now) < 1e-3) else "H:CACHED"

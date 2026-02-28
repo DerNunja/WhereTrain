@@ -128,12 +128,20 @@ Relevante Konstanten in `track_state.py`:
 - Sollten sich die Marker verschieben, funktioniert das Mapping der Gleise nicht mehr
 - YOLO verwendet Axis-Aligned Bounding Boxes — bei schräg liegenden Gleisen könnten Oriented Bounding Boxes (wie in Pauls Arbeit) die Gleiszuordnung verbessern
 
-### Erweiterungsidee: Automatische Schienenerkennung
+### Erweiterungsidee
 
-Statt manueller Modellierung könnten die Schienen direkt aus dem Bild segmentiert werden.
+- **Automatische Schienenerkennung**
+
+  - Statt manueller Modellierung könnten die Schienen direkt aus dem Bild segmentiert werden.
 > [!NOTE]
 > Automatisierte Schienenerkennung:
 > [Efficient railway track region segmentation algorithm based on lightweight neural network and cross-fusion decoder - ScienceDirect](https://www.sciencedirect.com/science/article/pii/S0926580523003291)
+
+- **Allgemeine Verbesserungen**
+  - Unser Modell war ziemlich schnell gemacht und verwendet keine Oriented BBoxen, für die beste Genaugikeit wäre aber wahrscheinlich ein Segmentierungs oder Maskingmodell am besten
+  - Eine sinnvollere Markerplatzierung könnte die Genauigkeit erhöhen und dem Modell helfen Züge besser zu erkennen (der Kamerawinkel ist hier gewollt ungünstig gewählt um Grenzen zu testen) ![Aktueller Stand und Erweiterung](Problem.png)
+  - Allgemein müssten mehr Edge Cases wie diese in die Trainingsdaten aufgenommen werden, um das Modell vielseitiger einsetzten zu können
+  - Allgemein kann der Code bestimmt noch verbessert werden. Ohne Debug Overlay sind zwar bis zu 50FPS möglich (nur zwei überwachte bereiche) aber einiges an Potenzial lassen wir noch liegen. 
 
 ## Interessante/möglicherweise nützliche Quellen
 
