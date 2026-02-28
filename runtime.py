@@ -17,9 +17,18 @@ from Mapping.helper_section_tool import (
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
-# from Detection.Color_detcion.detection_with_color import detect_by_color  # <-- auskommentiert
+from Detection.Color_detcion.detection_with_color import detect_by_color # nicht direkt benötigt
 
 from Detection.YOLO.yolo_model import get_yolo_model, detect_trains_yolo_batch
+
+from track_state import (
+    DIRECTION_BACKWARD,
+    DIRECTION_FORWARD,
+    DIRECTION_STILL,
+    TrackState,
+    get_or_create_state,
+)
+
 
 Point = Tuple[int, int]
 
@@ -39,6 +48,18 @@ H_TIMEOUT_SEC = 8.0   # solange (in Sekunden) darf alte H genutzt werden, wenn M
 
 MIN_OVERLAP_PX = 50
 WIN_W, WIN_H = 1280, 720
+
+DIR_ARROW = {
+    DIRECTION_FORWARD: "→",
+    DIRECTION_BACKWARD: "←",
+    DIRECTION_STILL: "·",
+}
+
+DIR_COLOR = {
+    DIRECTION_FORWARD: (0, 255, 0),
+    DIRECTION_BACKWARD: (0, 255, 0),
+    DIRECTION_STILL: (180, 180, 180),
+}
 
 
 def setup_window(name: str):
@@ -361,6 +382,8 @@ def main():
     fps_smoothed = 0.0
     last_H: Dict[str, np.ndarray] = {}
     last_H_time: Dict[str, float] = {}
+    track_states: Dict[str, TrackState] = {}
+    
     paused = False
     dict_name = None
     detector = None
@@ -483,22 +506,51 @@ def main():
             t0 = time.perf_counter()
             shape_hw = (s.canvas[1], s.canvas[0])
             track_by_id = {tr.track_id: tr for tr in s.tracks}
+            track_states: Dict[str, TrackState] = {}
+            assignment_results: List[Dict[str, Any]] = []
 
             for bb in bboxes:
                 tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
                 cx, cy = bbox_center(bb)
 
                 if tid is not None and tid in track_by_id:
-                    s_px, s_norm, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
-                else:
-                    s_px, s_norm, lateral = None, None, None
+                    _s_px, s_norm_raw, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
+                    state = get_or_create_state(track_states, s.section_id, tid)
+                    s_norm_smooth, direction = state.update(s_norm_raw)
 
-                print(f"[{s.section_id}] bb={bb} -> track={tid} ov={area} s={s_norm} lat={lateral}")
+                    assignment_results.append(
+                        {
+                            "bbox": bb,
+                            "track_id": tid,
+                            "s_norm": s_norm_smooth,
+                            "direction": direction,
+                        }
+                    )
+
+                    print(
+                        f"[{s.section_id}] {tid} | pos={s_norm_smooth:.3f} | "
+                        f"dir={DIR_ARROW.get(direction, '?')} | lat={lateral:.1f}px | ov={area}"
+                    )
+                else:
+                    print(f"[{s.section_id}] bb={bb} -> track=None ov={area}")
+
             add_profile("section_assignment", time.perf_counter() - t0)
 
             t0 = time.perf_counter()
             out = draw_tracks_overlay(warped, s.tracks)
             out = draw_bboxes(out, bboxes, "train")
+
+            for result in assignment_results:
+                x1, y1, _, _ = result["bbox"]
+                direction = result["direction"]
+                track_id = result["track_id"]
+                s_norm = result["s_norm"]
+                color = DIR_COLOR.get(direction, (180, 180, 180))
+                arrow = DIR_ARROW.get(direction, "?")
+
+                cv2.putText(out, f"{track_id} {arrow}", (x1, max(20, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+                cv2.putText(out, f"s={s_norm:.3f}", (x1, max(40, y1 + 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
 
             if SHOW_DEBUG:
                 status = "H:NEW" if (have_markers and s.section_id in last_H_time and abs(last_H_time[s.section_id] - now) < 1e-3) else "H:CACHED"
