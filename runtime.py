@@ -19,7 +19,7 @@ from Mapping.helper_map_tool import parse_section_from_filename
 
 # from Detection.Color_detcion.detection_with_color import detect_by_color  # <-- auskommentiert
 
-from Detection.YOLO.yolo_model import get_yolo_model, detect_trains_yolo
+from Detection.YOLO.yolo_model import get_yolo_model, detect_trains_yolo_batch
 
 Point = Tuple[int, int]
 
@@ -30,12 +30,12 @@ SHOW_DEBUG = True  # rendering kostet Zeit, daher optional
 
 WEBCAM_INDEX = 0    #live
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
-VIDEO_PATH = "data/TestVid2.mp4"
+VIDEO_PATH = "data/TestVid3.mp4"
 TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
 
 # optional: Video-Performance
 PROCESS_EVERY_NTH_FRAME = 1   # 1 = jeden Frame, 2 = jeden 2ten, ...
-H_TIMEOUT_SEC = 60.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
+H_TIMEOUT_SEC = 8.0   # solange (in Sekunden) darf alte H genutzt werden, wenn Marker fehlen
 
 MIN_OVERLAP_PX = 50
 WIN_W, WIN_H = 1280, 720
@@ -440,56 +440,52 @@ def main():
                 id_to_corners[int(mid)] = corners[i].reshape(4, 2)
         add_profile("id_corner_map", time.perf_counter() - t0)
 
-        # 3) process each section
+        # 3) Alle Sections warpen (CPU) — dann YOLO einmal als Batch (GPU)
         now = time.time()
 
+        active_sections = []  # [(section, warped), ...]
+
         for s in sections:
-            H_use = None
             warped = None
 
-            # Versuch: neue Homographie aus aktuellen Markern
             t0 = time.perf_counter()
             if have_markers:
                 src_pts = compute_section_src_pts_center(id_to_corners, s.corner_ids)
                 if src_pts is not None:
                     warped, H_new = warp(frame, src_pts, s.canvas)
-
-                    # Cache aktualisieren
                     last_H[s.section_id] = H_new
                     last_H_time[s.section_id] = now
-                    H_use = H_new
             add_profile("section_homography", time.perf_counter() - t0)
 
-            # Fallback: letzte Homographie nutzen, wenn frisch genug
             t0 = time.perf_counter()
             if warped is None:
                 H_cached = last_H.get(s.section_id)
                 t_cached = last_H_time.get(s.section_id, -1.0)
-
                 if H_cached is not None and (now - t_cached) <= H_TIMEOUT_SEC:
                     warped = warp_with_H(frame, H_cached, s.canvas)
-                    H_use = H_cached
                 else:
-                    # kein gültiger Warp möglich
+                    add_profile("section_fallback", time.perf_counter() - t0)
                     continue
             add_profile("section_fallback", time.perf_counter() - t0)
 
-            # 4) Zugdetektion mit YOLO auf normalisiertem Bild
-            t0 = time.perf_counter()
-            # bboxes = detect_by_color(warped, min_area=400, morph_kernel=5, morph_iters=2)  # <-- auskommentiert
-            bboxes = detect_trains_yolo(warped)
-            add_profile("section_train_detect", time.perf_counter() - t0)
+            active_sections.append((s, warped))
 
-            # 5) assign boxes to tracks
+        # 4) Batch-Inferenz: alle gewarpten Bilder in einem GPU-Aufruf
+        t0 = time.perf_counter()
+        warped_images = [w for _, w in active_sections]
+        # bboxes = detect_by_color(warped, min_area=400, morph_kernel=5, morph_iters=2)  # <-- auskommentiert
+        all_bboxes = detect_trains_yolo_batch(warped_images) if warped_images else []
+        add_profile("section_train_detect", time.perf_counter() - t0)
+
+        # 5+6) Ergebnisse pro Section verarbeiten und visualisieren
+        for (s, warped), bboxes in zip(active_sections, all_bboxes):
+
             t0 = time.perf_counter()
             shape_hw = (s.canvas[1], s.canvas[0])
-            assignments = []
-
             track_by_id = {tr.track_id: tr for tr in s.tracks}
 
             for bb in bboxes:
                 tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
-
                 cx, cy = bbox_center(bb)
 
                 if tid is not None and tid in track_by_id:
@@ -500,23 +496,17 @@ def main():
                 print(f"[{s.section_id}] bb={bb} -> track={tid} ov={area} s={s_norm} lat={lateral}")
             add_profile("section_assignment", time.perf_counter() - t0)
 
-            # 6) visualize
             t0 = time.perf_counter()
             out = draw_tracks_overlay(warped, s.tracks)
             out = draw_bboxes(out, bboxes, "train")
 
             if SHOW_DEBUG:
-                # kleine Statusanzeige: ob H neu oder cached
                 status = "H:NEW" if (have_markers and s.section_id in last_H_time and abs(last_H_time[s.section_id] - now) < 1e-3) else "H:CACHED"
                 cv2.putText(out, s.section_id, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
                 cv2.putText(out, status, (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
                 cv2.putText(out, f"FPS: {fps_smoothed:.1f}", (10, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
                 debug_views.append(out)
             add_profile("section_visualize", time.perf_counter() - t0)
-
-            for (bb, tid, area) in assignments:
-                if tid is not None:
-                    print(f"[frame {frame_idx:06d}][{s.section_id}] bbox={bb} -> track={tid} overlap_px={area}")
 
         t0 = time.perf_counter()
         if SHOW_DEBUG and debug_views:
