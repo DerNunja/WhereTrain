@@ -12,15 +12,22 @@ from Mapping.helper_section_tool import (
     autodetect_dictionary,
     make_detector,
     detect_markers,
-    compute_section_src_pts_center,  
+    compute_section_src_pts_center,
     warp,
 )
 
 from Mapping.helper_map_tool import parse_section_from_filename
 
-# from Detection.Color_detcion.detection_with_color import detect_by_color  # <-- auskommentiert
-
 from Detection.YOLO.yolo_model import get_yolo_model, detect_trains_yolo_batch
+
+from track_state import (
+    DIRECTION_BACKWARD,
+    DIRECTION_FORWARD,
+    DIRECTION_STILL,
+    TrackState,
+    get_or_create_state,
+)
+
 
 Point = Tuple[int, int]
 
@@ -29,7 +36,7 @@ USE_VIDEO = True
 USE_WEBCAM = False
 SHOW_DEBUG = True  # rendering kostet Zeit, daher optional
 
-WEBCAM_INDEX = 0    #live
+WEBCAM_INDEX = 0    # live
 IMAGE_PATH = "Mapping/Pictures/different.jpg"
 VIDEO_PATH = "data/TestVid3.mp4"
 TRACKMAP_DIR = "Mapping/Sections"       # *__trackmap.json
@@ -41,10 +48,22 @@ H_TIMEOUT_SEC = 60.0   # solange (in Sekunden) darf alte H genutzt werden, wenn 
 MIN_OVERLAP_PX = 50
 WIN_W, WIN_H = 1280, 720
 
+DIR_ARROW = {
+    DIRECTION_FORWARD: "→",
+    DIRECTION_BACKWARD: "←",
+    DIRECTION_STILL: "·",
+}
+
+DIR_COLOR = {
+    DIRECTION_FORWARD: (0, 255, 0),
+    DIRECTION_BACKWARD: (0, 255, 0),
+    DIRECTION_STILL: (180, 180, 180),
+}
+
 
 def setup_window(name: str):
-    cv2.namedWindow(name, cv2.WINDOW_NORMAL)     
-    cv2.resizeWindow(name, WIN_W, WIN_H)   
+    cv2.namedWindow(name, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(name, WIN_W, WIN_H)
 
 
 def parse_section_from_trackmap_filename(path: str) -> Dict[str, Any]:
@@ -146,6 +165,7 @@ def draw_bboxes(img: np.ndarray, bboxes: List[Tuple[int, int, int, int]], label=
         cv2.putText(out, label, (x1, max(0, y1 - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
     return out
 
+
 def tile_debug_views(images: List[np.ndarray], cols: int = 2) -> np.ndarray:
     if not images:
         return np.zeros((100, 100, 3), dtype=np.uint8)
@@ -175,7 +195,6 @@ def tile_debug_views(images: List[np.ndarray], cols: int = 2) -> np.ndarray:
         rows.append(cv2.hconcat(row))
 
     return cv2.vconcat(rows)
-
 
 
 def polygon_to_mask(poly: List[Point], shape_hw: Tuple[int, int]) -> np.ndarray:
@@ -223,18 +242,21 @@ def assign_bbox_to_track(bbox: Tuple[int, int, int, int], tracks: List[Track], s
         return None, best_area
     return best_tid, best_area
 
-#------------------------------------------------Code Firas ------------------------------------------------
+
+# ------------------------------------------------ Code Firas ------------------------------------------------
 PtF = Tuple[float, float]
-Point = Tuple[int, int]
+
 
 def polygon_center(poly: List[Point]) -> PtF:
     xs = [p[0] for p in poly]
     ys = [p[1] for p in poly]
     return (float(sum(xs)) / len(xs), float(sum(ys)) / len(ys))
 
+
 def bbox_center(bbox: Tuple[int, int, int, int]) -> PtF:
     x1, y1, x2, y2 = bbox
     return ((x1 + x2) * 0.5, (y1 + y2) * 0.5)
+
 
 def project_point_to_segment(p: PtF, a: PtF, b: PtF):
     """
@@ -260,6 +282,7 @@ def project_point_to_segment(p: PtF, a: PtF, b: PtF):
     dx, dy = (px - qx), (py - qy)
     return t, (qx, qy), dx * dx + dy * dy
 
+
 def polyline_lengths(polyline: List[Point]) -> Tuple[List[float], float]:
     seg_lens = []
     total = 0.0
@@ -270,6 +293,7 @@ def polyline_lengths(polyline: List[Point]) -> Tuple[List[float], float]:
         seg_lens.append(l)
         total += l
     return seg_lens, total
+
 
 def position_on_track(center: PtF, track_polyline: List[Point]) -> Tuple[float, float, float]:
     """
@@ -287,7 +311,6 @@ def position_on_track(center: PtF, track_polyline: List[Point]) -> Tuple[float, 
 
     best_dist2 = float("inf")
     best_s = 0.0
-
     s_acc = 0.0
     p = center
 
@@ -305,12 +328,12 @@ def position_on_track(center: PtF, track_polyline: List[Point]) -> Tuple[float, 
     lateral = float(np.sqrt(best_dist2))
     s_norm = float(best_s / total_len)
     return best_s, s_norm, lateral
-#------------------------------------------------Code Firas ------------------------------------------------
+# ------------------------------------------------ Code Firas ------------------------------------------------
 
 
 def warp_with_H(frame_bgr: np.ndarray, H: np.ndarray, canvas: Tuple[int, int]) -> np.ndarray:
     """Warp via cv2.warpPerspective direkt mit gegebener Homography."""
-    w, h = canvas 
+    w, h = canvas
     return cv2.warpPerspective(frame_bgr, H, (w, h))
 
 
@@ -323,11 +346,7 @@ def warp_section(
     last_H_time: Dict[str, float],
     now: float,
 ) -> Tuple[Optional["Section"], Optional[np.ndarray], Optional[np.ndarray]]:
-    """
-    Berechnet den Warp für eine Section.
-    Thread-safe: liest nur auf frame/id_to_corners, schreibt nichts in shared state.
-    Gibt (section, warped, H_new) zurück — H_new ist None wenn Fallback genutzt wurde.
-    """
+    """Warpt eine Section – läuft in einem Thread-Pool-Worker."""
     warped = None
     H_new = None
 
@@ -396,6 +415,8 @@ def main():
     fps_smoothed = 0.0
     last_H: Dict[str, np.ndarray] = {}
     last_H_time: Dict[str, float] = {}
+    track_states: Dict[str, TrackState] = {}  # Richtungsschätzung pro (section, track)
+
     paused = False
     dict_name = None
     detector = None
@@ -506,7 +527,6 @@ def main():
         # 4) Batch-Inferenz: alle gewarpten Bilder in einem GPU-Aufruf
         t0 = time.perf_counter()
         warped_images = [w for _, w in active_sections]
-        # bboxes = detect_by_color(warped, min_area=400, morph_kernel=5, morph_iters=2)  # <-- auskommentiert
         all_bboxes = detect_trains_yolo_batch(warped_images) if warped_images else []
         add_profile("section_train_detect", time.perf_counter() - t0)
 
@@ -516,22 +536,49 @@ def main():
             t0 = time.perf_counter()
             shape_hw = (s.canvas[1], s.canvas[0])
             track_by_id = {tr.track_id: tr for tr in s.tracks}
+            assignment_results: List[Dict[str, Any]] = []
 
             for bb in bboxes:
                 tid, area = assign_bbox_to_track(bb, s.tracks, shape_hw)
                 cx, cy = bbox_center(bb)
 
                 if tid is not None and tid in track_by_id:
-                    s_px, s_norm, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
-                else:
-                    s_px, s_norm, lateral = None, None, None
+                    _s_px, s_norm_raw, lateral = position_on_track((cx, cy), track_by_id[tid].polyline)
+                    state = get_or_create_state(track_states, s.section_id, tid)
+                    s_norm_smooth, direction = state.update(s_norm_raw)
 
-                print(f"[{s.section_id}] bb={bb} -> track={tid} ov={area} s={s_norm} lat={lateral}")
+                    assignment_results.append(
+                        {
+                            "bbox": bb,
+                            "track_id": tid,
+                            "s_norm": s_norm_smooth,
+                            "direction": direction,
+                        }
+                    )
+
+                    print(
+                        f"[{s.section_id}] {tid} | pos={s_norm_smooth:.3f} | "
+                        f"dir={DIR_ARROW.get(direction, '?')} | lat={lateral:.1f}px | ov={area}"
+                    )
+                else:
+                    print(f"[{s.section_id}] bb={bb} -> track=None ov={area}")
+
             add_profile("section_assignment", time.perf_counter() - t0)
 
             t0 = time.perf_counter()
             out = draw_tracks_overlay(warped, s.tracks)
             out = draw_bboxes(out, bboxes, "train")
+
+            for result in assignment_results:
+                x1, y1, _, _ = result["bbox"]
+                direction = result["direction"]
+                track_id = result["track_id"]
+                s_norm = result["s_norm"]
+                color = DIR_COLOR.get(direction, (180, 180, 180))
+                arrow = DIR_ARROW.get(direction, "?")
+
+                cv2.putText(out, f"{track_id} {arrow}", (x1, max(20, y1 - 10)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+                cv2.putText(out, f"s={s_norm:.3f}", (x1, max(40, y1 + 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
             if SHOW_DEBUG:
                 status = "H:NEW" if (have_markers and s.section_id in last_H_time and abs(last_H_time[s.section_id] - now) < 1e-3) else "H:CACHED"
@@ -559,7 +606,6 @@ def main():
             print(f"Saved frame_{frame_idx:06d}.png")
 
         if USE_IMAGE:
-            # For images we process exactly once
             cv2.waitKey(0)
             break
         add_profile("key_handling", time.perf_counter() - t0)
